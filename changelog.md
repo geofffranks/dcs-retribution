@@ -9,6 +9,7 @@
 * **[Modding]** Add support for Su-35S mod (v2.0.27b)
 * **[Plugins]** Update EW Script to version 2.1
 * **[Options]** New option to spawn TACAN beacons at captured airfields
+* **[Payload Editor]** Unified laser code selector: TGP, kneeboard, and LGB pylons now all use a single code per flight member. A new campaign setting ("Default laser code for Player flights") controls whether newly-created player flights are assigned a unique allocated code (the new default, matching existing behavior) or stay on 1688.
 
 ## Fixes
 * **[Performance]** Improved robustness w.r.t. state.json handling to avoid corruption and thus save loss.
