@@ -40,6 +40,7 @@ from .aircraftpainter import AircraftPainter
 from .flightdata import FlightData
 from .flightgroupconfigurator import FlightGroupConfigurator
 from .flightgroupspawner import FlightGroupSpawner
+from .seadpackageclear import generate_sead_package_clear_triggers
 from ...data.weapons import WeaponType
 from ...radio.datalink import DataLinkRegistry
 
@@ -145,6 +146,7 @@ class AircraftGenerator:
             logging.info(f"Generating package for target: {package.target.name}")
             if not package.flights:
                 continue
+            spawned_flights: list[Flight] = []
             for flight in package.flights:
                 if flight.alive and not isinstance(flight.state, Completed):
                     if not flight.squadron.location.runway_is_operational():
@@ -158,6 +160,8 @@ class AircraftGenerator:
                         flight, country, dynamic_runways
                     )
                     self.unit_map.add_aircraft(group, flight)
+                    spawned_flights.append(flight)
+            generate_sead_package_clear_triggers(package, spawned_flights, self.mission)
             if (
                 package.primary_flight is not None
                 and package.primary_flight.flight_plan.is_formation(
