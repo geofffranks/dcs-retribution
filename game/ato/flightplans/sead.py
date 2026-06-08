@@ -19,6 +19,11 @@ from ..flightwaypoint import FlightWaypoint
 from ..flightwaypointtype import FlightWaypointType
 from ...utils import Distance, nautical_miles
 
+# Plain SEAD reactively fires HARMs from its loiter anchor. The planner overlay shows a
+# fixed HARM-reach bubble rather than the user-tunable SEAD-sweep engagement range, so
+# the orbit is always drawn against a realistic engagement envelope.
+SEAD_ENGAGEMENT_RANGE = nautical_miles(20)
+
 
 class SeadFlightPlan(FormationAttackFlightPlan, UiZoneDisplay, TacticalOverlayDisplay):
     @staticmethod
@@ -36,9 +41,10 @@ class SeadFlightPlan(FormationAttackFlightPlan, UiZoneDisplay, TacticalOverlayDi
 
     @property
     def _engagement_range(self) -> Distance:
-        return nautical_miles(
-            self.flight.coalition.game.settings.sead_sweep_engagement_range_distance
-        )
+        # Fixed HARM-reach bubble (SEAD_ENGAGEMENT_RANGE), not the user-tunable
+        # SEAD-sweep engagement range: plain SEAD reacts from its loiter anchor, so the
+        # overlay and the UI zone are both drawn against a realistic engagement envelope.
+        return SEAD_ENGAGEMENT_RANGE
 
     def tactical_overlay(self) -> TacticalOverlay:
         # SEAD loiters at standoff and reacts to radars near its own position, so
