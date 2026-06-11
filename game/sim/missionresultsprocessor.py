@@ -5,6 +5,12 @@ from typing import TYPE_CHECKING
 
 from game.debriefing import Debriefing
 from game.ground_forces.combat_stance import CombatStance
+from game.missiongenerator.interceptattrition import (
+    fielded_qra_by_squadron,
+    reconcile_intercept_losses,
+)
+from game.profiling import logged_duration
+from game.squadrons.squadron import Squadron
 from game.theater import ControlPoint
 from .gameupdateevents import GameUpdateEvents
 from ..ato.airtaaskingorder import AirTaskingOrder
@@ -23,22 +29,36 @@ class MissionResultsProcessor:
         self.game = game
 
     def commit(self, debriefing: Debriefing, events: GameUpdateEvents) -> None:
-        logging.info("Committing mission results")
-        self.commit_air_losses(debriefing)
-        self.commit_pilot_experience()
-        self.commit_front_line_losses(debriefing)
-        self.commit_convoy_losses(debriefing)
-        self.commit_cargo_ship_losses(debriefing)
-        self.commit_airlift_losses(debriefing)
-        self.commit_ground_losses(debriefing, events)
-        self.commit_damaged_runways(debriefing)
-        # Score the front line before capturing bases: casualty_count attributes
-        # a dead front-line unit to its origin CP regardless of side, so a base's
-        # defenders (origin == that base) would be miscounted as the new owner's
-        # casualties once a capture flips ownership, turning a win into a defeat.
-        self.commit_front_line_battle_impact(debriefing, events)
-        self.commit_captures(debriefing, events)
-        self.record_carcasses(debriefing)
+        with logged_duration("Committing mission results"):
+            with logged_duration("commit_air_losses"):
+                self.commit_air_losses(debriefing)
+            with logged_duration("commit_intercept_losses"):
+                self.commit_intercept_losses(debriefing)
+            with logged_duration("commit_pilot_experience"):
+                self.commit_pilot_experience()
+            with logged_duration("commit_front_line_losses"):
+                self.commit_front_line_losses(debriefing)
+            with logged_duration("commit_convoy_losses"):
+                self.commit_convoy_losses(debriefing)
+            with logged_duration("commit_cargo_ship_losses"):
+                self.commit_cargo_ship_losses(debriefing)
+            with logged_duration("commit_airlift_losses"):
+                self.commit_airlift_losses(debriefing)
+            with logged_duration("commit_ground_losses"):
+                self.commit_ground_losses(debriefing, events)
+            with logged_duration("commit_damaged_runways"):
+                self.commit_damaged_runways(debriefing)
+            # Score the front line before capturing bases: casualty_count
+            # attributes a dead front-line unit to its origin CP regardless of
+            # side, so a base's defenders (origin == that base) would be
+            # miscounted as the new owner's casualties once a capture flips
+            # ownership, turning a win into a defeat.
+            with logged_duration("commit_front_line_battle_impact"):
+                self.commit_front_line_battle_impact(debriefing, events)
+            with logged_duration("commit_captures"):
+                self.commit_captures(debriefing, events)
+            with logged_duration("record_carcasses"):
+                self.record_carcasses(debriefing)
 
     def commit_air_losses(self, debriefing: Debriefing) -> None:
         for loss in debriefing.air_losses.losses:
@@ -59,6 +79,33 @@ class MissionResultsProcessor:
 
             logging.info(f"{aircraft} destroyed from {squadron}")
             squadron.owned_aircraft -= 1
+            squadron.destroyed_aircraft += 1
+
+    def commit_intercept_losses(self, debriefing: Debriefing) -> None:
+        all_squadrons: list[Squadron] = list(
+            self.game.blue.air_wing.iter_squadrons()
+        ) + list(self.game.red.air_wing.iter_squadrons())
+
+        # Shared baseline (see fielded_qra_by_squadron): the count actually fielded
+        # on alert, matching what the dispatcher was seeded with and what the Lua
+        # bounds survivors by, and identical to the debrief report's computation.
+        fielded_by_squadron, squadrons_by_id = fielded_qra_by_squadron(all_squadrons)
+
+        if not fielded_by_squadron:
+            return
+
+        losses = reconcile_intercept_losses(
+            fielded_by_squadron, debriefing.state_data.intercept_survivors
+        )
+        for squadron_id, loss in losses.items():
+            if loss <= 0:
+                continue
+            squadron = squadrons_by_id.get(squadron_id)
+            if squadron is None:
+                continue
+            logging.info(f"{loss} QRA aircraft lost from {squadron}")
+            squadron.owned_aircraft = max(0, squadron.owned_aircraft - loss)
+            squadron.lose_pilots(loss)
 
     @staticmethod
     def _commit_pilot_experience(ato: AirTaskingOrder) -> None:

@@ -4,11 +4,13 @@ import itertools
 import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import (
     Any,
     Dict,
     Iterator,
     List,
+    Optional,
     TYPE_CHECKING,
     Union,
 )
@@ -16,6 +18,10 @@ from uuid import UUID
 
 from game.dcs.aircrafttype import AircraftType
 from game.dcs.groundunittype import GroundUnitType
+from game.missiongenerator.interceptattrition import (
+    fielded_qra_by_squadron,
+    reconcile_intercept_losses,
+)
 from game.theater import Airfield, ControlPoint, Player
 
 if TYPE_CHECKING:
@@ -120,6 +126,10 @@ class StateData:
     #: Mangled names of bases that were captured during the mission.
     base_capture_events: List[str]
 
+    #: Per-squadron QRA survivor counts reported by the intercept plugin,
+    #: keyed by stringified squadron UUID.
+    intercept_survivors: dict[str, int]
+
     @classmethod
     def from_json(cls, data: Dict[str, Any], unit_map: UnitMap) -> StateData:
         def clean_unit_list(unit_list: List[Any]) -> List[str]:
@@ -152,12 +162,17 @@ class StateData:
             else:
                 killed_ground_units.append(unit)
 
+        intercept_survivors = {
+            str(k): int(v) for k, v in data.get("intercept_survivors", {}).items()
+        }
+
         return cls(
             mission_ended=data.get("mission_ended", False),
             killed_aircraft=killed_aircraft,
             killed_ground_units=killed_ground_units,
             destroyed_statics=data.get("destroyed_objects_positions", []),
             base_capture_events=data.get("base_capture_events", []),
+            intercept_survivors=intercept_survivors,
         )
 
 
@@ -218,8 +233,18 @@ class Debriefing:
         yield from self.ground_losses.player_airfields
         yield from self.ground_losses.enemy_airfields
 
+    @cached_property
+    def _casualties_by_origin(self) -> Dict[ControlPoint, int]:
+        # commit_front_line_battle_impact() calls casualty_count() twice per
+        # front-line pair; computing this once avoids re-scanning every
+        # front-line loss on each call (O(pairs x losses), thousands per mission).
+        counts: Dict[ControlPoint, int] = defaultdict(int)
+        for loss in self.front_line_losses:
+            counts[loss.origin] += 1
+        return counts
+
     def casualty_count(self, control_point: ControlPoint) -> int:
-        return len([x for x in self.front_line_losses if x.origin == control_point])
+        return self._casualties_by_origin.get(control_point, 0)
 
     def front_line_losses_by_type(self, player: Player) -> dict[GroundUnitType, int]:
         losses_by_type: dict[GroundUnitType, int] = defaultdict(int)
@@ -283,6 +308,43 @@ class Debriefing:
             losses_by_type[loss.trigger_zone.name] += 1
         return losses_by_type
 
+    def qra_losses_by_type(self, player: Player) -> Dict[AircraftType, int]:
+        """QRA interceptor losses for one coalition, keyed by aircraft type.
+
+        QRA groups are Moose-spawned, not ATO flights, so they never appear in
+        dead_aircraft()/air_losses and would otherwise be missing from the debrief
+        report (the squadron inventory is still debited by
+        MissionResultsProcessor.commit_intercept_losses). Their attrition is
+        survivor-count based; mirror that computation here so the debrief totals and
+        breakdown include them. This runs pre-commit (debrief_current_state, before
+        process_results), so owned_aircraft still reflects what was fielded.
+        """
+        survivors = self.state_data.intercept_survivors
+        squadrons = (
+            self.game.blue.air_wing.iter_squadrons()
+            if player.is_blue
+            else self.game.red.air_wing.iter_squadrons()
+        )
+        # Same fielded baseline as commit_intercept_losses, via the shared helper,
+        # so the reported losses match what the inventory is debited by.
+        fielded_by_squadron, squadrons_by_id = fielded_qra_by_squadron(squadrons)
+        losses_by_type: Dict[AircraftType, int] = defaultdict(int)
+        for squadron_id, loss in reconcile_intercept_losses(
+            fielded_by_squadron, survivors
+        ).items():
+            if loss > 0:
+                losses_by_type[squadrons_by_id[squadron_id].aircraft] += loss
+        return losses_by_type
+
+    def aircraft_losses_by_type(self, player: Player) -> Dict[AircraftType, int]:
+        """Aircraft losses by type including survivor-based QRA losses."""
+        merged: Dict[AircraftType, int] = defaultdict(int)
+        for unit_type, count in self.air_losses.by_type(player).items():
+            merged[unit_type] += count
+        for unit_type, count in self.qra_losses_by_type(player).items():
+            merged[unit_type] += count
+        return dict(merged)
+
     def loss_counts(self, player: Player) -> SideLossCounts:
         gl = self.ground_losses
         if player.is_blue:
@@ -302,7 +364,7 @@ class Debriefing:
             ground_objects = gl.enemy_ground_objects
             scenery = gl.enemy_scenery
         return SideLossCounts(
-            aircraft=len(air),
+            aircraft=len(air) + sum(self.qra_losses_by_type(player).values()),
             front_line=len(front_line),
             convoy=len(convoy),
             cargo_ships=len(cargo_ships),

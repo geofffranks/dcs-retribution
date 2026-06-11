@@ -10,12 +10,14 @@ from typing import Optional, Sequence, TYPE_CHECKING
 from uuid import uuid4, UUID
 
 from dcs.country import Country
+from dcs.unit import Skill
 from faker import Faker
 
 from game.ato import Flight, FlightType, Package
 from game.settings import AutoAtoBehavior, Settings
 from game.theater import ParkingType
 from game.theater.player import Player
+from .intercept_reserve import clamp_intercept_reserve
 from .pilot import Pilot, PilotStatus
 from ..db.database import Database
 from ..radio.radios import RadioFrequency
@@ -71,13 +73,33 @@ class Squadron:
     untasked_aircraft: int = field(init=False, hash=False, compare=False, default=0)
     pending_deliveries: int = field(init=False, hash=False, compare=False, default=0)
 
+    #: Aircraft the squadron started the campaign with (set at turn 0).
+    initial_aircraft: int = field(init=False, hash=False, compare=False, default=0)
+    #: Cumulative aircraft lost in combat over the whole campaign.
+    destroyed_aircraft: int = field(init=False, hash=False, compare=False, default=0)
+    #: Cumulative aircraft purchased and delivered over the whole campaign.
+    purchased_aircraft: int = field(init=False, hash=False, compare=False, default=0)
+
     use_livery_set: bool = False  # if livery-set should be used when present
+
+    #: Number of airframes held on QRA (hot-alert intercept). 0 = none.
+    intercept_reserve: int = 0
 
     def __setstate__(self, state: dict[str, Any]) -> None:
         if "id" not in state:
             state["id"] = uuid4()
         if "use_livery_set" not in state:
             state["use_livery_set"] = len(state.get("livery_set", [])) > 0
+        if "initial_aircraft" not in state:
+            # Best-effort for campaigns started before this counter existed:
+            # approximate the starting force with the current owned count.
+            state["initial_aircraft"] = state.get("owned_aircraft", 0)
+        if "destroyed_aircraft" not in state:
+            state["destroyed_aircraft"] = 0
+        if "purchased_aircraft" not in state:
+            state["purchased_aircraft"] = 0
+        if "intercept_reserve" not in state:
+            state["intercept_reserve"] = 0
         self.__dict__.update(state)
 
     def __str__(self) -> str:
@@ -99,6 +121,37 @@ class Squadron:
     @property
     def player(self) -> Player:
         return self.coalition.player
+
+    @property
+    def base_skill(self) -> Skill:
+        if self.player.is_blue:
+            return Skill(self.settings.player_skill)
+        return Skill(self.settings.enemy_skill)
+
+    def pilot_skill(self, pilot: Pilot) -> Skill:
+        """The effective DCS skill the pilot flies at.
+
+        Pilots level up one skill tier every few missions flown, starting from
+        the coalition's base skill and capped at the top tier. Levelling only
+        applies when the ``ai_pilot_levelling`` setting is enabled.
+        """
+        levels = [
+            Skill.Average,
+            Skill.Good,
+            Skill.High,
+            Skill.Excellent,
+        ]
+        current_level = levels.index(self.base_skill)
+        missions_for_skill_increase = 4
+        increase = pilot.record.missions_flown // missions_for_skill_increase
+        capped_increase = min(current_level + increase, len(levels) - 1)
+
+        if self.settings.ai_pilot_levelling:
+            new_level = capped_increase
+        else:
+            new_level = current_level
+
+        return levels[new_level]
 
     def assign_to_base(self, base: ControlPoint) -> None:
         self.location = base
@@ -199,6 +252,7 @@ class Squadron:
             self.owned_aircraft = min(
                 self.max_size, self.location.unclaimed_parking(parking_type)
             )
+        self.initial_aircraft = self.owned_aircraft
 
     def end_turn(self) -> None:
         if self.destination is not None:
@@ -212,7 +266,31 @@ class Squadron:
 
     def return_all_pilots_and_aircraft(self) -> None:
         self.available_pilots = list(self.active_pilots)
-        self.untasked_aircraft = self.owned_aircraft
+        # QRA-reserved airframes are held hot on alert by the intercept dispatcher,
+        # so they are not available to the auto-planner or spawned as ramp filler.
+        # The reserve (intercept_reserve > 0) is the single on/off switch for the
+        # whole QRA system: emission (spawn_intercept_templates) and loss commit
+        # (commit_intercept_losses) gate on it alone, so benching must too — gating
+        # this one site on the plugin flag would let a reserve be both ATO-plannable
+        # and fielded as QRA. A zero reserve leaves the full count untasked.
+        self.untasked_aircraft = max(0, self.owned_aircraft - self.intercept_reserve)
+
+    def lose_pilots(self, count: int) -> None:
+        """Kill ``count`` pilots to account for lost airframes (e.g. QRA attrition).
+
+        Only *untasked* pilots (``available_pilots``) are eligible: pilots claimed
+        by a flight this turn flew a different mission and must not die for a QRA
+        loss. QRA jets are AI-flown, so AI pilots are killed first to spare the
+        player's named pilots; player pilots are only killed when not protected by
+        ``invulnerable_player_pilots``. Kills fewer than ``count`` if too few
+        untasked pilots remain.
+        """
+        candidates = [p for p in self.available_pilots if not p.player]
+        if not self.settings.invulnerable_player_pilots:
+            candidates += [p for p in self.available_pilots if p.player]
+        for pilot in candidates[:count]:
+            pilot.kill()
+            self.available_pilots.remove(pilot)
 
     @staticmethod
     def send_on_leave(pilot: Pilot) -> None:
@@ -261,6 +339,14 @@ class Squadron:
     @property
     def number_of_pilots_including_inactive(self) -> int:
         return len(self.current_roster)
+
+    @property
+    def living_pilots(self) -> list[Pilot]:
+        return self._pilots_without_status(PilotStatus.Dead)
+
+    @property
+    def dead_pilots(self) -> list[Pilot]:
+        return self._pilots_with_status(PilotStatus.Dead)
 
     @property
     def _number_of_unfilled_pilot_slots(self) -> int:
@@ -373,10 +459,18 @@ class Squadron:
 
     def deliver_orders(self) -> None:
         self.cancel_overflow_orders()
+        self.purchased_aircraft += self.pending_deliveries
         self.owned_aircraft += self.pending_deliveries
         self.pending_deliveries = 0
 
     def relocate_to(self, destination: ControlPoint) -> None:
+        if not destination.is_friendly(self.coalition.player):
+            logging.warning(
+                f"Cannot relocate {self} to {destination.name} - destination is no longer friendly. "
+                f"Cancelling relocation order."
+            )
+            self.destination = None
+            return
         self.location = destination
         if self.location == self.destination:
             self.destination = None
@@ -532,4 +626,7 @@ class Squadron:
             game.db.flights,
             game.settings,
             base,
+            intercept_reserve=clamp_intercept_reserve(
+                squadron_def.intercept_reserve, max_size
+            ),
         )
