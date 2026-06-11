@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Any, Iterable, Optional
 
 from dcs.mapping import Point
 from dcs.terrain.terrain import Terrain
@@ -83,6 +83,31 @@ def square_extent(
         max_y=center.y + span_y / 2.0,
         terrain=terrain,
     )
+
+
+def frontline_fit_half_side(
+    center: Any,
+    left_pos: Optional[Any],
+    right_pos: Optional[Any],
+    *,
+    base_half_m: float,
+    outer_corridor_m: float,
+    margin_m: float,
+) -> float:
+    """Half-side (metres) for a centered square enclosing the front-line segment
+    plus the outer corridor band and a margin — never smaller than
+    ``base_half_m`` (so the page only ever zooms OUT, never in).
+
+    ``center`` is the segment midpoint; ``left_pos`` / ``right_pos`` are the
+    perpendicular bounds endpoints (``.x`` / ``.y`` DCS-world metres). Returns
+    ``base_half_m`` when either endpoint is ``None`` (degenerate / test mocks).
+    """
+    if left_pos is None or right_pos is None:
+        return base_half_m
+    pad = outer_corridor_m + margin_m
+    half_x = max(abs(left_pos.x - center.x), abs(right_pos.x - center.x)) + pad
+    half_y = max(abs(left_pos.y - center.y), abs(right_pos.y - center.y)) + pad
+    return max(base_half_m, half_x, half_y)
 
 
 # A single-waypoint corridor falls back to a 5 km square so the page is non-empty.

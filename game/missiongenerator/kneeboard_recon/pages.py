@@ -39,7 +39,14 @@ from .basemap import render_basemap
 from . import airport_imagery as _airport_imagery
 from game.persistency import tile_cache_dir
 from .coords import bullseye_bearing_range_nm, point_to_mgrs
-from .extent import MapExtent, aspect_correct, corridor_extent, square_extent
+from .extent import (
+    MapExtent,
+    aspect_correct,
+    corridor_extent,
+    frontline_fit_half_side,
+    square_extent,
+)
+from .corridor_bands import dashed_line, draw_corridor_bands
 from .markers import (
     Aimpoint,
     FRIENDLY_FILL,
@@ -53,6 +60,7 @@ from .projection import Projector
 from .threat_rings import draw_threat_rings
 from .tile_source import reset_failure_log_state as _reset_tile_log_state
 
+from game.plugins.mooseautolase import corridor_depths_m
 from game.ato.flighttype import FlightType
 from game.ato.flightwaypointtype import FlightWaypointType
 from game.data.alic import AlicCodes
@@ -210,6 +218,15 @@ def _centroid(members: List[Any], terrain: Terrain) -> DcsPoint:
 # stubs in unit tests, or a malformed campaign save). Matches the shipped
 # Settings default so the kneeboard render lines up with the planner UI.
 _DEFAULT_MAX_FRONTLINE_WIDTH_KM = 80.0
+
+# Front-line corridor highlight bands (CAS page). Marker-like semantics —
+# same yellow on light and dark pages, so NOT themed via _Palette (see its
+# docstring). Depths come from corridor_depths_m(). The inner combat box keeps
+# a ~10% translucent fill; the outer artillery box is a dotted perimeter only.
+_CORRIDOR_YELLOW = (255, 210, 40)
+_CORRIDOR_INNER_ALPHA = 26  # ~10% of 255 (combat box, <=8 km)
+# Extra metres of padding past the outer band when sizing the zoom-to-fit square.
+_CORRIDOR_FIT_MARGIN_M = 1_500.0
 
 
 def _frontline_bounds_points(
@@ -1556,6 +1573,48 @@ def _draw_threat_ring_legend(
     draw.text((x0 + 30, y0 + 27), "Detection range", fill=palette.fg, font=font)
 
 
+def _draw_corridor_legend(
+    draw: ImageDraw.ImageDraw,
+    *,
+    bottom_right: tuple[int, int],
+    palette: "_Palette",
+    color: tuple[int, int, int],
+    inner_km: float,
+    outer_km: float,
+) -> None:
+    """Swatch legend for the two front-line corridor bands.
+
+    Solid yellow = combat box; dotted yellow = artillery box. Each swatch is
+    drawn over a small dark chip because the corridor yellow is near-invisible
+    on the light panel background -- the chip shows the line exactly as it reads
+    over the map. Anchored by its bottom-right corner.
+    """
+    font = load_font(10, bold=True)
+    w, h = 196, 50
+    bx, by = bottom_right
+    x0, y0, x1, y1 = bx - w, by - h, bx, by
+    draw.rectangle((x0, y0, x1, y1), fill=palette.panel_bg, outline=palette.fg, width=1)
+    chip = (50, 50, 50)
+    cx0 = x0 + 8
+    # Solid swatch -> combat box.
+    cy = y0 + 8
+    draw.rectangle((cx0, cy, cx0 + 26, cy + 12), fill=chip)
+    draw.line([(cx0 + 2, cy + 6), (cx0 + 24, cy + 6)], fill=color, width=2)
+    draw.text(
+        (x0 + 42, y0 + 6), f"Combat box ({inner_km:.0f} km)", fill=palette.fg, font=font
+    )
+    # Dotted swatch -> artillery box.
+    cy = y0 + 28
+    draw.rectangle((cx0, cy, cx0 + 26, cy + 12), fill=chip)
+    dashed_line(draw, (cx0 + 2, cy + 6), (cx0 + 24, cy + 6), color)
+    draw.text(
+        (x0 + 42, y0 + 26),
+        f"Artillery box ({outer_km:.0f} km)",
+        fill=palette.fg,
+        font=font,
+    )
+
+
 class FrontLineDetailPage(_RecordingPage):
     """Detail page for CAS-style targets whose ``package.target`` is a FrontLine.
 
@@ -1607,16 +1666,44 @@ class FrontLineDetailPage(_RecordingPage):
         x0, y0, x1, y1 = map_box
         map_w, map_h = x1 - x0, y1 - y0
         center = front.position
+        # Front-line bounds endpoints drive BOTH the zoom-to-fit and the
+        # corridor bands; compute once here (the bounds LINE is still drawn
+        # later using these same endpoints).
+        left_pos, right_pos = _frontline_bounds_points(
+            front, self.game, terrain=self.game.theater.terrain
+        )
+        default_m, artillery_m = corridor_depths_m()
+        half_side = frontline_fit_half_side(
+            center,
+            left_pos,
+            right_pos,
+            base_half_m=self.HALF_SIDE_M,
+            outer_corridor_m=float(artillery_m),
+            margin_m=_CORRIDOR_FIT_MARGIN_M,
+        )
         extent = square_extent(
             center=center,
-            half_side_m=self.HALF_SIDE_M,
+            half_side_m=half_side,
             pixel_width=map_w,
             pixel_height=map_h,
             terrain=self.game.theater.terrain,
         )
         basemap = render_basemap(extent, map_w, map_h, cache_dir=tile_cache_dir())
-        map_draw = ImageDraw.Draw(basemap)
         projector = Projector(extent=extent, pixel_width=map_w, pixel_height=map_h)
+
+        # Corridor highlight bands UNDER all tactical symbology (bounds line,
+        # diamond, markers, threat rings, labels). 8 km combat / 18 km arty.
+        if left_pos is not None and right_pos is not None:
+            draw_corridor_bands(
+                basemap,
+                projector.project(left_pos),
+                projector.project(right_pos),
+                inner_r_px=float(projector.meters_to_px(default_m)),
+                outer_r_px=float(projector.meters_to_px(artillery_m)),
+                color=_CORRIDOR_YELLOW,
+                inner_alpha=_CORRIDOR_INNER_ALPHA,
+            )
+        map_draw = ImageDraw.Draw(basemap)
 
         occupied_rects: list[Rect] = []
         label_requests: List[Tuple[LabelRequest, str, PilFont]] = []
@@ -1635,11 +1722,6 @@ class FrontLineDetailPage(_RecordingPage):
         # extent. Earlier the page drew the convoy route segment itself,
         # which read as an arbitrary red diagonal unrelated to the line of
         # contact on the planner map.
-        left_pos, right_pos = _frontline_bounds_points(
-            front,
-            self.game,
-            terrain=self.game.theater.terrain,
-        )
         if left_pos is not None and right_pos is not None:
             left_px = projector.project(left_pos)
             right_px = projector.project(right_pos)
@@ -1734,6 +1816,17 @@ class FrontLineDetailPage(_RecordingPage):
             bottom_right=(x0 + 186, y1 - 6),
             palette=p,
         )
+        # Corridor-band legend in the top-left (clear of the bottom-edge scale
+        # bar + threat legend). Only when the bands were actually drawn.
+        if left_pos is not None and right_pos is not None:
+            _draw_corridor_legend(
+                draw,
+                bottom_right=(x0 + 202, y0 + 56),
+                palette=p,
+                color=_CORRIDOR_YELLOW,
+                inner_km=default_m / 1000.0,
+                outer_km=artillery_m / 1000.0,
+            )
 
         bullseye_pos = self.game.coalition_for(self.flight.friendly).bullseye.position
         bearing, range_nm = bullseye_bearing_range_nm(bullseye_pos, center)

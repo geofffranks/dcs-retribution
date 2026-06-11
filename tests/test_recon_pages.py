@@ -224,3 +224,158 @@ def test_overview_page_calls_place_labels(tmp_path: Path) -> None:
         page.write(tmp_path / "overview.png")
 
     assert called, "place_labels was not called during OverviewReconPage.write"
+
+
+def test_frontline_page_draws_corridor_bands_from_autolase_depths(
+    tmp_path: Path,
+) -> None:
+    from game.missiongenerator.kneeboard_recon import pages as _pages
+    from game.missiongenerator.kneeboard_recon.pages import (
+        FrontLineDetailPage,
+        _CORRIDOR_INNER_ALPHA,
+        _CORRIDOR_YELLOW,
+    )
+
+    front = MagicMock()
+    front.position = SimpleNamespace(x=0.0, y=0.0)
+    front.name = "Test FLOT"
+    flight = MagicMock()
+    flight.callsign = "COLT1"
+    flight.friendly = True
+    flight.package.target = front
+    game = MagicMock()
+    game.theater.terrain = MagicMock()
+    game.theater.controlpoints = []  # skip the TGO loop
+    game.coalition_for.return_value.bullseye.position = SimpleNamespace(x=0.0, y=0.0)
+
+    left = SimpleNamespace(x=0.0, y=-30_000.0)
+    right = SimpleNamespace(x=0.0, y=30_000.0)
+
+    with patch.object(
+        _pages, "_frontline_bounds_points", return_value=(left, right)
+    ), patch.object(
+        _pages, "corridor_depths_m", return_value=(8_000, 18_000)
+    ) as depths, patch.object(
+        _pages,
+        "render_basemap",
+        side_effect=lambda extent, w, h, cache_dir=None: __import__(
+            "PIL.Image", fromlist=["new"]
+        ).new("RGB", (w, h), (50, 50, 50)),
+    ), patch.object(
+        _pages,
+        "bullseye_bearing_range_nm",
+        return_value=(SimpleNamespace(degrees=0.0), 0.0),
+    ), patch.object(
+        _pages, "draw_corridor_bands"
+    ) as bands:
+        FrontLineDetailPage(flight=flight, game=game, dark=False).write(
+            tmp_path / "p.png"
+        )
+
+    depths.assert_called_once()  # depths sourced from autolase, not hardcoded
+    bands.assert_called_once()
+    kwargs = bands.call_args.kwargs
+    assert kwargs["color"] == _CORRIDOR_YELLOW
+    assert kwargs["inner_alpha"] == _CORRIDOR_INNER_ALPHA
+    assert 0 < kwargs["inner_r_px"] < kwargs["outer_r_px"]
+
+
+def test_frontline_page_skips_bands_when_bounds_degenerate(tmp_path: Path) -> None:
+    from game.missiongenerator.kneeboard_recon import pages as _pages
+    from game.missiongenerator.kneeboard_recon.pages import FrontLineDetailPage
+
+    front = MagicMock()
+    front.position = SimpleNamespace(x=0.0, y=0.0)
+    front.name = "Test FLOT"
+    flight = MagicMock()
+    flight.callsign = "COLT1"
+    flight.friendly = True
+    flight.package.target = front
+    game = MagicMock()
+    game.theater.terrain = MagicMock()
+    game.theater.controlpoints = []
+    game.coalition_for.return_value.bullseye.position = SimpleNamespace(x=0.0, y=0.0)
+
+    with patch.object(
+        _pages, "_frontline_bounds_points", return_value=(None, None)
+    ), patch.object(
+        _pages, "corridor_depths_m", return_value=(8_000, 18_000)
+    ), patch.object(
+        _pages,
+        "render_basemap",
+        side_effect=lambda extent, w, h, cache_dir=None: __import__(
+            "PIL.Image", fromlist=["new"]
+        ).new("RGB", (w, h), (50, 50, 50)),
+    ), patch.object(
+        _pages,
+        "bullseye_bearing_range_nm",
+        return_value=(SimpleNamespace(degrees=0.0), 0.0),
+    ), patch.object(
+        _pages, "draw_corridor_bands"
+    ) as bands:
+        FrontLineDetailPage(flight=flight, game=game, dark=False).write(
+            tmp_path / "p.png"
+        )
+
+    bands.assert_not_called()
+
+
+def test_frontline_page_bands_survive_under_symbology(tmp_path: Path) -> None:
+    """End-to-end: render the page for real (bands NOT mocked) and confirm the
+    full-opacity capsule outline reaches the output PNG.
+
+    This locks the draw-order contract — bands are pasted onto the basemap
+    BEFORE the symbology ImageDraw is created — in an observable way: if a
+    future refactor drew the bands after (or instead re-created the basemap),
+    the band yellow would be buried and this scan would find nothing. The
+    outline colour (255, 210, 40) is distinct from the only other warm
+    elements: the front-line line (254, 125, 10) and the centre diamond
+    (255, 165, 0) both have G well below 190, so the G>=195 gate excludes them.
+    """
+    from PIL import Image
+
+    from game.missiongenerator.kneeboard_recon import pages as _pages
+    from game.missiongenerator.kneeboard_recon.pages import FrontLineDetailPage
+
+    front = MagicMock()
+    front.position = SimpleNamespace(x=0.0, y=0.0)
+    front.name = "Test FLOT"
+    flight = MagicMock()
+    flight.callsign = "COLT1"
+    flight.friendly = True
+    flight.package.target = front
+    game = MagicMock()
+    game.theater.terrain = MagicMock()
+    game.theater.controlpoints = []
+    game.coalition_for.return_value.bullseye.position = SimpleNamespace(x=0.0, y=0.0)
+
+    # A real (non-degenerate) front-line segment so the capsules — and thus
+    # their outlines — are actually drawn.
+    left = SimpleNamespace(x=0.0, y=-10_000.0)
+    right = SimpleNamespace(x=0.0, y=10_000.0)
+
+    out = tmp_path / "p.png"
+    with patch.object(
+        _pages, "_frontline_bounds_points", return_value=(left, right)
+    ), patch.object(
+        _pages, "corridor_depths_m", return_value=(8_000, 18_000)
+    ), patch.object(
+        _pages,
+        "render_basemap",
+        side_effect=lambda extent, w, h, cache_dir=None: Image.new(
+            "RGB", (w, h), (50, 50, 50)
+        ),
+    ), patch.object(
+        _pages,
+        "bullseye_bearing_range_nm",
+        return_value=(SimpleNamespace(degrees=0.0), 0.0),
+    ):
+        FrontLineDetailPage(flight=flight, game=game, dark=False).write(out)
+
+    rendered = Image.open(out).convert("RGB")
+    raw = rendered.tobytes()  # tightly packed R, G, B, R, G, B, ...
+    has_band_outline = any(
+        raw[i] >= 240 and 195 <= raw[i + 1] <= 225 and raw[i + 2] <= 70
+        for i in range(0, len(raw), 3)
+    )
+    assert has_band_outline, "corridor band outline not visible in rendered page"
