@@ -72,6 +72,192 @@ end
 -- Safe AM constant
 local AM = (radio and radio.modulation and radio.modulation.AM) or 0
 
+-----------------------------------------------------------------
+-- JTAC target-prioritization config (Part 1)
+-- File-scope so the monkeypatch closure below can capture these.
+-----------------------------------------------------------------
+local _p = (dcsRetribution and dcsRetribution.plugins and dcsRetribution.plugins.MooseAutolase) or nil
+local TierSamThreats     = (_p and _p.TierSamThreats)     or 1
+local TierGuidedAaa      = (_p and _p.TierGuidedAaa)      or 2
+local TierArtillery      = (_p and _p.TierArtillery)      or 3
+local TierUnguidedAaa    = (_p and _p.TierUnguidedAaa)    or 3
+local TierArmorLaunchers = (_p and _p.TierArmorLaunchers) or 4
+local TierOther          = (_p and _p.TierOther)          or 5
+
+MooseAutolaseUnitClasses        = (_p and _p.UnitClasses)        or {}
+MooseAutolaseFrontlines         = (_p and _p.Frontlines)         or {}
+MooseAutolaseDefaultCorridorM   = (_p and _p.DefaultCorridorM)   or 8000
+MooseAutolaseArtilleryCorridorM = (_p and _p.ArtilleryCorridorM) or 18000
+
+-- Fixed UnitClass -> category map (categories carry the configurable tier).
+local CategoryByClass = {
+    TrackRadar = "SamThreats", SearchTrackRadar = "SamThreats",
+    TELAR = "SamThreats", SpecializedRadar = "SamThreats",
+    OpticalTracker = "SamThreats", Manpad = "SamThreats", SHORAD = "SamThreats",
+    Artillery = "Artillery",
+    Tank = "ArmorLaunchers", APC = "ArmorLaunchers", IFV = "ArmorLaunchers",
+    ATGM = "ArmorLaunchers", Launcher = "ArmorLaunchers",
+    -- AAA is split at runtime (see jtacCategoryFor); everything else -> Other.
+}
+
+local TierByCategory = {
+    SamThreats = TierSamThreats, GuidedAaa = TierGuidedAaa,
+    Artillery = TierArtillery, UnguidedAaa = TierUnguidedAaa,
+    ArmorLaunchers = TierArmorLaunchers, Other = TierOther,
+}
+
+local function jtacCategoryFor(unit)
+    local cls = MooseAutolaseUnitClasses[unit:GetTypeName()]
+    if cls == "AAA" then
+        if unit:HasAttribute("RADAR_BAND1_FOR_ARM")
+            or unit:HasAttribute("RADAR_BAND2_FOR_ARM")
+            or unit:HasAttribute("Optical Tracker") then
+            return "GuidedAaa"
+        end
+        return "UnguidedAaa"
+    end
+    return CategoryByClass[cls or ""] or "Other"
+end
+
+local function jtacTierFor(category)
+    return TierByCategory[category] or TierOther
+end
+
+-- Perpendicular distance (m) from point P to segment AB, all DCS vec2 {x,y}.
+local function pointSegmentDistance(px, py, ax, ay, bx, by)
+    local dx, dy = bx - ax, by - ay
+    local len2 = dx * dx + dy * dy
+    local t = 0
+    if len2 > 0 then
+        t = ((px - ax) * dx + (py - ay) * dy) / len2
+        if t < 0 then t = 0 elseif t > 1 then t = 1 end
+    end
+    local cx, cy = ax + t * dx, ay + t * dy
+    local ex, ey = px - cx, py - cy
+    return math.sqrt(ex * ex + ey * ey)
+end
+
+-----------------------------------------------------------------
+-- Part 2: monkeypatch AUTOLASE:onafterMonitor with tier + frontline-box
+-- selection. Guarded exactly like the COORDINATE:Smoke patch above.
+-----------------------------------------------------------------
+if not _G.__AutolaseTierPatched and AUTOLASE then
+    _G.__AutolaseTierPatched = true
+    AUTOLASE._onafterMonitor_tierOriginal = AUTOLASE.onafterMonitor
+
+    function AUTOLASE:onafterMonitor(From, Event, To)
+        self:T({From, Event, To})
+        -- Fall back to stock behaviour when this instance has no frontline
+        -- segment or the class table is missing (e.g. >2 JTACs, no front).
+        if not self._frontlineSegment or not next(MooseAutolaseUnitClasses) then
+            return AUTOLASE._onafterMonitor_tierOriginal(self, From, Event, To)
+        end
+
+        self:CleanCurrentLasing()
+        self:SetPilotMenu()
+
+        local seg = self._frontlineSegment
+        local boxed, unboxed = {}, {}
+
+        -- Stock onafterMonitor maintains GroupsByThreat/UnitsByThreat/RecceNames/
+        -- RecceUnitNames, but those are single-cycle scratch read only within stock
+        -- onafterMonitor (which this patch fully replaces). The pilot Status menu and
+        -- CheckIsLased/CleanCurrentLasing run off self.CurrentLasing, which we still
+        -- populate in the lasing loop below, so we don't rebuild the unused tables.
+        for _, contact in pairs(self.Contacts or {}) do
+            local grp = contact.group
+            if grp and grp:IsGround() then
+                local units = grp:GetUnits() or {}
+                for _, unit in pairs(units) do
+                    if unit and unit:IsAlive() then
+                        local category = jtacCategoryFor(unit)
+                        local tier = jtacTierFor(category)
+                        if tier > 0 then  -- 0 = Don't lase
+                            local vec = unit:GetVec2()
+                            local corridor = (category == "Artillery")
+                                and MooseAutolaseArtilleryCorridorM
+                                or MooseAutolaseDefaultCorridorM
+                            local dist = pointSegmentDistance(
+                                vec.x, vec.y, seg.a.x, seg.a.y, seg.b.x, seg.b.y)
+                            local entry = {
+                                unit = unit, tier = tier,
+                                threat = unit:GetThreatLevel() or 0,
+                            }
+                            table.insert(unboxed, entry)
+                            if dist <= corridor then
+                                table.insert(boxed, entry)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        -- Box-empty fallback: open up to everything in lase range.
+        local chosen = (#boxed > 0) and boxed or unboxed
+
+        -- Highest priority first: lowest tier number, then highest threat.
+        table.sort(chosen, function(a, b)
+            if a.tier ~= b.tier then return a.tier < b.tier end
+            return a.threat > b.threat
+        end)
+
+        for _, detectingunit in pairs(self.RecceUnits) do
+            local reccename = detectingunit.name
+            local recce = detectingunit.unit
+            local reccecount = self.targetsperrecce[reccename] or 0
+            local targets = 0
+            for _, entry in pairs(chosen) do
+                local unit = entry.unit
+                local unitname = unit:GetName()
+                if targets + reccecount < self.maxlasing
+                    and not self:CheckIsLased(unitname)
+                    and unit:IsAlive()
+                    and self:CanLase(recce, unit) then
+                    targets = targets + 1
+                    local code = self:GetLaserCode(reccename)
+                    local spot = SPOT:New(recce)
+                    spot:LaseOn(unit, code, self.LaseDuration)
+                    local locationstring = unit:GetCoordinate():ToStringLLDDM()
+                    if _SETTINGS:IsA2G_MGRS() then
+                        local precision = _SETTINGS:GetMGRS_Accuracy()
+                        local settings = {}
+                        settings.MGRS_Accuracy = precision
+                        locationstring = unit:GetCoordinate():ToStringMGRS(settings)
+                    elseif _SETTINGS:IsA2G_LL_DMS() then
+                        locationstring = unit:GetCoordinate():ToStringLLDMS(_SETTINGS)
+                    elseif _SETTINGS:IsA2G_BR() then
+                        locationstring = unit:GetCoordinate():ToStringBULLS(self.coalition, _SETTINGS)
+                    end
+                    local laserspot = {
+                        laserspot = spot, lasedunit = unit, lasingunit = recce,
+                        lasercode = code, location = locationstring,
+                        timestamp = timer.getAbsTime(),
+                        unitname = unitname, reccename = reccename,
+                        unittype = unit:GetTypeName(),
+                        coordinate = unit:GetCoordinate(),
+                    }
+                    if self.smoketargets then
+                        local coord = unit:GetCoordinate()
+                        if self.smokeoffset then
+                            coord:Translate(self.smokeoffset.Distance, self.smokeoffset.Angle, true, true)
+                        end
+                        local color = self:GetSmokeColor(reccename)
+                        coord:Smoke(color)
+                    end
+                    self.lasingindex = self.lasingindex + 1
+                    self.CurrentLasing[self.lasingindex] = laserspot
+                    self:__Lasing(2, laserspot)
+                end
+            end
+        end
+
+        local nextloop = -self.MonitorFrequency or -30
+        self:__Monitor(nextloop)
+        return self
+    end
+end
+
 -- Utility: format integer values with thousands separators (e.g., 12,345)
 local function FormatWithCommas(n)
     local s = tostring(math.floor(n or 0))
@@ -186,6 +372,9 @@ if GROUP:FindByName("JTAC Alpha") then
         :SetMaxLasingTargets(JtacAlphaTargetsMax)
         :SetLasingParameters(15000, AutolaseSmokeDurationSec)
         :SetNotifyPilots(false)
+        -- Tier selection replaces stock min-threat filtering; hide the now-inert
+        -- F10 "Set min lasing threat" menu (our onafterMonitor ignores minthreatlevel).
+        :DisableThreatLevelMenu()
         :SetSmokeTargets(JtacAlphaSmoke, SMOKECOLOR.Red)
         :EnableSmokeMenu({ Angle = 30, Distance = 40 })
 
@@ -195,6 +384,7 @@ if GROUP:FindByName("JTAC Alpha") then
     Alpha_RetributionAutolase._altTgtFt            = 18000
     Alpha_RetributionAutolase._orbitSpeedKts       = 120
     Alpha_RetributionAutolase._lastLaserInfo       = {}
+    Alpha_RetributionAutolase._frontlineSegment    = MooseAutolaseFrontlines[JtacAlphaName]
 
     function Alpha_RetributionAutolase:_ReplaceOrbitAt(coord, altFt, reasonTag)
         if not coord then return end
@@ -433,6 +623,9 @@ if GROUP:FindByName("JTAC Bravo") then
         :SetMaxLasingTargets(JtacBravoTargetsMax)
         :SetLasingParameters(10000, AutolaseSmokeDurationSec)
         :SetNotifyPilots(false)
+        -- Tier selection replaces stock min-threat filtering; hide the now-inert
+        -- F10 "Set min lasing threat" menu (our onafterMonitor ignores minthreatlevel).
+        :DisableThreatLevelMenu()
         :SetSmokeTargets(JtacBravoSmoke, SMOKECOLOR.Red)
         :EnableSmokeMenu({ Angle = 30, Distance = 40 })
 
@@ -442,6 +635,7 @@ if GROUP:FindByName("JTAC Bravo") then
     Bravo_RetributionAutolase._altTgtFt            = 16000
     Bravo_RetributionAutolase._orbitSpeedKts       = 120
     Bravo_RetributionAutolase._lastLaserInfo       = {}
+    Bravo_RetributionAutolase._frontlineSegment    = MooseAutolaseFrontlines[JtacBravoName]
 
     function Bravo_RetributionAutolase:_ReplaceOrbitAt(coord, altFt, reasonTag)
         if not coord then return end

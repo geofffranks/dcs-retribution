@@ -44,7 +44,7 @@ from game.theater.controlpoint import ControlPoint, Player
 from game.unitmap import UnitMap
 from game.utils import Heading
 from .aircraft.aircraftpainter import AircraftPainterJtac
-from .frontlineconflictdescription import FrontLineConflictDescription
+from .frontlineconflictdescription import FrontLineBounds, FrontLineConflictDescription
 from .groundforcepainter import GroundForcePainter
 from .missiondata import JtacInfo, MissionData, FrontlineUnitGroupsInfo
 from ..ato import FlightType
@@ -68,6 +68,10 @@ FIGHT_DISTANCE = 3500
 RANDOM_OFFSET_ATTACK = 250
 
 INFANTRY_GROUP_SIZE = 5
+
+
+def frontline_segment_from_bounds(bounds: FrontLineBounds) -> tuple[Point, Point]:
+    return (bounds.left_position, bounds.right_position)
 
 
 class FlotGenerator:
@@ -143,6 +147,9 @@ class FlotGenerator:
 
         # Add JTAC
         if self.game.blue.faction.has_jtac:
+            bounds = FrontLineConflictDescription.frontline_bounds(
+                self.conflict.front_line, self.game.theater
+            )
             freq = self.radio_registry.alloc_uhf()
             # If the option fc3LaserCode is enabled, force all JTAC
             # laser codes to 1113 to allow lasing for Su-25 Frogfoots and A-10A Warthogs.
@@ -197,6 +204,7 @@ class FlotGenerator:
                     code=str(code),
                     blue=Player.BLUE,
                     freq=freq,
+                    frontline_segment=frontline_segment_from_bounds(bounds),
                 )
             )
 

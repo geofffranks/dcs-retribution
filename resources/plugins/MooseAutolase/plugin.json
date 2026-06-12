@@ -63,7 +63,13 @@
             "nameInUI": "Debug Mode",
             "mnemonic": "MooseAutolaseDebug",
             "defaultValue": false
-        }
+        },
+        { "nameInUI": "JTAC Priority - SAM Threats (0=off, 1-6=tier)", "mnemonic": "TierSamThreats", "minimumValue": 0, "maximumValue": 6, "defaultValue": 1 },
+        { "nameInUI": "JTAC Priority - Guided AAA (0=off, 1-6=tier)", "mnemonic": "TierGuidedAaa", "minimumValue": 0, "maximumValue": 6, "defaultValue": 2 },
+        { "nameInUI": "JTAC Priority - Artillery (0=off, 1-6=tier)", "mnemonic": "TierArtillery", "minimumValue": 0, "maximumValue": 6, "defaultValue": 3 },
+        { "nameInUI": "JTAC Priority - Unguided AAA (0=off, 1-6=tier)", "mnemonic": "TierUnguidedAaa", "minimumValue": 0, "maximumValue": 6, "defaultValue": 3 },
+        { "nameInUI": "JTAC Priority - Armor & Launchers (0=off, 1-6=tier)", "mnemonic": "TierArmorLaunchers", "minimumValue": 0, "maximumValue": 6, "defaultValue": 4 },
+        { "nameInUI": "JTAC Priority - Other (0=off, 1-6=tier)", "mnemonic": "TierOther", "minimumValue": 0, "maximumValue": 6, "defaultValue": 5 }
     ],
     "scriptsWorkOrders": [],
     "configurationWorkOrders": [
