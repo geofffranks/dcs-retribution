@@ -50,6 +50,7 @@ def test_generate_flight_kneeboard_calls_generate_recon_pages() -> None:
         gen.tankers = []
         gen.jtacs = []
         gen.flights = []
+        gen.atis_by_name = {}
         gen.generate_flight_kneeboard(flight, package_flights)
         mocked.assert_called_once()
         # Regression: dark_kneeboard must propagate so the recon-page
@@ -101,6 +102,7 @@ def test_generate_flight_kneeboard_passes_dark_mode_when_enabled() -> None:
         gen.tankers = []
         gen.jtacs = []
         gen.flights = []
+        gen.atis_by_name = {}
         gen.generate_flight_kneeboard(flight, package_flights)
         _, kwargs = mocked.call_args
         assert kwargs.get("dark") is True
@@ -147,5 +149,6 @@ def test_generate_flight_kneeboard_skips_recon_when_setting_off() -> None:
         gen.tankers = []
         gen.jtacs = []
         gen.flights = []
+        gen.atis_by_name = {}
         gen.generate_flight_kneeboard(flight, package_flights)
         mocked.assert_not_called()
