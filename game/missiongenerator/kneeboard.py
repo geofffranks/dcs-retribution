@@ -1073,6 +1073,7 @@ class KneeboardGenerator(MissionInfoGenerator):
                     weather=self.game.conditions.weather,
                     extra_threat_search_m=extra_radius_m,
                     dark=self.dark_kneeboard,
+                    atis_by_name=self.atis_by_name,
                 )
             )
 
