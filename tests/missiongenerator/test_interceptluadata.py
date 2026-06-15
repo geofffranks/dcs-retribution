@@ -16,8 +16,6 @@ def _entry(**kw: object) -> InterceptEntry:
         engagement_range_nm=60,
         gci_max_radius_nm=100,
         comms_enabled=True,
-        country_id=2,
-        backstop_ewr_type="FPS-117",
     )
     base.update(kw)
     return InterceptEntry(**base)  # type: ignore[arg-type]
@@ -61,19 +59,3 @@ def test_resource_count_and_ranges_are_serialized() -> None:
     assert "engagementRangeNm" in serialized
     assert "gciMaxRadiusNm" in serialized
     assert "commsEnabled" in serialized
-
-
-def test_country_id_is_serialized() -> None:
-    root = LuaData("dcsRetribution")
-    populate_intercept_lua(root, [_entry(country_id=82)])
-    serialized = root.serialize()
-    assert "countryId" in serialized
-    assert "82" in serialized
-
-
-def test_backstop_ewr_type_is_serialized() -> None:
-    root = LuaData("dcsRetribution")
-    populate_intercept_lua(root, [_entry(backstop_ewr_type="55G6 EWR")])
-    serialized = root.serialize()
-    assert "backstopEwrType" in serialized
-    assert "55G6 EWR" in serialized

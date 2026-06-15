@@ -26,10 +26,7 @@ from game.ato.flighttype import FlightType
 from game.ato.package import Package
 from game.ato.starttype import StartType
 from game.missiongenerator.countryassigner import CountryAssigner
-from game.missiongenerator.interceptluadata import (
-    DEFAULT_BACKSTOP_EWR_TYPE,
-    InterceptEntry,
-)
+from game.missiongenerator.interceptluadata import InterceptEntry
 from game.missiongenerator.missiondata import MissionData
 from game.squadrons.intercept_reserve import qra_resource_count
 from game.radio.radios import RadioRegistry
@@ -332,10 +329,6 @@ class AircraftGenerator:
                             engagement_range_nm=engagement_range_nm,
                             gci_max_radius_nm=gci_max_radius_nm,
                             comms_enabled=comms_enabled,
-                            country_id=country.id,
-                            backstop_ewr_type=DEFAULT_BACKSTOP_EWR_TYPE[
-                                "BLUE" if base_is_blue else "RED"
-                            ],
                         )
                     )
                 finally:
