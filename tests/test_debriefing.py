@@ -207,3 +207,9 @@ def test_state_data_intercept_survivors_defaults_to_empty() -> None:
     """StateData.from_json defaults intercept_survivors to {} when key absent."""
     state = StateData.from_json({}, _minimal_unit_map())
     assert state.intercept_survivors == {}
+
+
+def test_state_data_intercept_survivors_tolerates_empty_lua_array() -> None:
+    """An empty Lua table serializes to [] in JSON; from_json must not crash."""
+    state = StateData.from_json({"intercept_survivors": []}, _minimal_unit_map())
+    assert state.intercept_survivors == {}

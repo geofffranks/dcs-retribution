@@ -167,9 +167,12 @@ class StateData:
             else:
                 killed_ground_units.append(unit)
 
-        intercept_survivors = {
-            str(k): int(v) for k, v in data.get("intercept_survivors", {}).items()
-        }
+        raw_survivors = data.get("intercept_survivors", {})
+        # An empty Lua table serializes to a JSON array ([]) rather than an
+        # object, so coerce any non-dict to an empty mapping before iterating.
+        if not isinstance(raw_survivors, dict):
+            raw_survivors = {}
+        intercept_survivors = {str(k): int(v) for k, v in raw_survivors.items()}
 
         return cls(
             mission_ended=data.get("mission_ended", False),
