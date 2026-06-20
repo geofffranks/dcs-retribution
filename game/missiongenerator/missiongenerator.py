@@ -341,7 +341,7 @@ class MissionGenerator:
                 )
 
     def generate_atis(self) -> None:
-        """Allocate per-blue-airfield ATIS frequencies when the plugin is on."""
+        """Allocate ATIS frequencies for player-flight airfields when on."""
         if not self.game.settings.plugins.get("MooseAtis"):
             return
 
@@ -354,7 +354,7 @@ class MissionGenerator:
         base_mhz = _opt("AtisBaseFreqMHz", 131.0)
         spacing_khz = int(_opt("AtisSpacingKHz", 500))
         self.mission_data.atis_frequencies = AtisGenerator(
-            self.game.theater,
+            self.game.blue.ato,
             self.radio_registry,
             friendly=Player.BLUE,
             base_mhz=base_mhz,
