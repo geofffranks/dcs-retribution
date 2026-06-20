@@ -258,6 +258,15 @@ class AircraftGenerator:
         for control_point in self.game.theater.controlpoints:
             if not isinstance(control_point, Airfield):
                 continue
+            # A cratered runway cannot launch jets, so field no QRA there; the
+            # reserve auto-resumes once the runway repairs. Mirrors the normal-
+            # flight runway guard in generate_flights. debug, not warning: a downed
+            # runway skipping QRA is expected and recurs every turn until repair.
+            if not control_point.runway_is_operational():
+                logging.debug(
+                    f"Runway not operational, skipping QRA at {control_point.name}"
+                )
+                continue
 
             base_is_blue = control_point.captured.is_blue
             country = player_country if base_is_blue else enemy_country
