@@ -98,6 +98,40 @@ def frontline_offsets(groups: list[CombatGroup], size: int) -> dict[int, float]:
     return offsets
 
 
+def follower_advance_distance(stance: CombatStance) -> Optional[int]:
+    """Metres an anchored cluster member advances toward the enemy for ``stance``.
+
+    Mirrors the armor wedge's per-stance push so the whole cluster keeps its
+    shape: every member advances the *same* distance from its own (already
+    offset, per Spec A) spawn, so recon stays ahead and SHORAD/ATGM stay behind.
+    ``None`` means add no advance waypoint — DEFENSIVE/AMBUSH hold in place, and
+    RETREAT is handled by the universal fallback block in plan_action_for_groups.
+    """
+    if stance in (CombatStance.AGGRESSIVE, CombatStance.ELIMINATION):
+        return AGGRESIVE_MOVE_DISTANCE
+    if stance == CombatStance.BREAKTHROUGH:
+        return BREAKTHROUGH_OFFENSIVE_DISTANCE
+    return None
+
+
+_MOVE_FORMATION_BY_ROLE: dict[CombatGroupRole, PointAction] = {
+    # Armor wedge (TANK/IFV/APC) advances in a Vee — pydcs has no "wedge".
+    CombatGroupRole.TANK: PointAction.Vee,
+    CombatGroupRole.IFV: PointAction.Vee,
+    CombatGroupRole.APC: PointAction.Vee,
+    # ATGM standoff pair spreads into a line (pydcs LineAbreast == DCS "Rank").
+    CombatGroupRole.ATGM: PointAction.LineAbreast,
+}
+
+
+def move_formation_for_role(role: CombatGroupRole) -> Optional[PointAction]:
+    """``move_formation`` for a combat group's role, or ``None`` to keep the
+    ``vehicle_group`` default (``OffRoad``). Recon scatters off-road, single-unit
+    SHORAD needs no formation, and artillery/logi are unchanged.
+    """
+    return _MOVE_FORMATION_BY_ROLE.get(role)
+
+
 class FlotGenerator:
     def __init__(
         self,
@@ -563,6 +597,46 @@ class FlotGenerator:
             return True
         return False
 
+    def _plan_follower_action(
+        self,
+        stance: CombatStance,
+        dcs_group: VehicleGroup,
+        forward_heading: Heading,
+        to_cp: ControlPoint,
+    ) -> bool:
+        """Tasks an anchored cluster member (recon leading, SHORAD/ATGM trailing)
+        to maneuver with its wedge: advance the wedge's per-stance distance from
+        this group's own offset position, preserving lead/trail spacing.
+
+        Returns True if tasking was added; False for RETREAT, where the universal
+        fallback block in plan_action_for_groups adds the retreat waypoints (so we
+        must NOT double-add them or attach a morale trigger here).
+        """
+        duration = timedelta()
+        if stance in [CombatStance.DEFENSIVE, CombatStance.AGGRESSIVE]:
+            duration = self._earliest_tot_on_flot(to_cp.coalition.player.opponent)
+        self._set_reform_waypoint(dcs_group, forward_heading, duration)
+
+        distance = follower_advance_distance(stance)
+        if distance is not None:
+            if (
+                to_cp.position.distance_to_point(dcs_group.points[0].position)
+                <= distance
+            ):
+                attack_point = self.conflict.theater.nearest_land_pos(
+                    to_cp.position.random_point_within(500, 0)
+                )
+            else:
+                attack_point = self.find_offensive_point(
+                    dcs_group, forward_heading, distance
+                )
+            dcs_group.add_waypoint(attack_point, self.wpt_pointaction)
+
+        if stance != CombatStance.RETREAT:
+            self.add_morale_trigger(dcs_group, forward_heading)
+            return True
+        return False
+
     def plan_action_for_groups(
         self,
         stance: CombatStance,
@@ -586,13 +660,36 @@ class FlotGenerator:
                             stance, group, dcs_group, forward_heading, target
                         )
 
-            elif group.role in [CombatGroupRole.TANK, CombatGroupRole.IFV]:
+            # APC is part of the armor wedge (Spec A WEDGE_ROLES), so it maneuvers
+            # as a wedge core — advance + attack at the full per-stance distance,
+            # not the old soft-follow cap, so an APC-type wedge stays cohesive with
+            # its TANK/IFV peers and its own followers (which advance 35 km in
+            # BREAKTHROUGH).
+            elif group.role in [
+                CombatGroupRole.TANK,
+                CombatGroupRole.IFV,
+                CombatGroupRole.APC,
+            ]:
                 self._plan_tank_ifv_action(
                     stance, enemy_groups, dcs_group, forward_heading, to_cp
                 )
 
-            elif group.role in [CombatGroupRole.APC, CombatGroupRole.ATGM]:
-                self._plan_apc_atgm_action(stance, dcs_group, forward_heading, to_cp)
+            elif group.role in [
+                CombatGroupRole.ATGM,
+                CombatGroupRole.SHORAD,
+                CombatGroupRole.RECON,
+            ]:
+                if group.anchor is not None:
+                    # Clustered: maneuver with the wedge.
+                    self._plan_follower_action(
+                        stance, dcs_group, forward_heading, to_cp
+                    )
+                else:
+                    # Unanchored spare: fall back to today's generic per-stance
+                    # advance (16 km soft-follow), per the spec's fallback decision.
+                    self._plan_apc_atgm_action(
+                        stance, dcs_group, forward_heading, to_cp
+                    )
 
             if stance == CombatStance.RETREAT:
                 # In retreat mode, the units will fall back
@@ -861,6 +958,9 @@ class FlotGenerator:
                 group.size,
                 final_position,
                 heading=spawn_heading.opposite,
+                # None (recon/SHORAD/arty/logi) keeps the OffRoad default.
+                move_formation=move_formation_for_role(group.role)
+                or PointAction.OffRoad,
             )
             if is_player == Player.BLUE:
                 g.set_skill(Skill(self.game.settings.player_skill))
@@ -883,6 +983,7 @@ class FlotGenerator:
         count: int,
         at: Point,
         heading: Heading,
+        move_formation: PointAction = PointAction.OffRoad,
     ) -> VehicleGroup:
         cp = self.conflict.front_line.control_point_friendly_to(player)
         faction = self.game.faction_for(player)
@@ -894,6 +995,7 @@ class FlotGenerator:
             position=at,
             group_size=count,
             heading=heading.degrees,
+            move_formation=move_formation,
         )
         group.hidden_on_mfd = True
         if self.game.settings.perf_red_alert_state:
