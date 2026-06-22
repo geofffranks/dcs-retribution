@@ -30,6 +30,32 @@ def test_combat_group_anchor_settable() -> None:
     assert shorad.anchor is wedge
 
 
+def test_combat_group_setstate_backfills_anchor_for_old_saves() -> None:
+    # Saves predating dr-588t have no ``anchor`` in their pickled state; pickle
+    # skips ``__init__`` so __setstate__ must backfill the default.
+    unit_type = MagicMock(spec=GroundUnitType)
+    group = CombatGroup(CombatGroupRole.TANK, unit_type, 5)
+    old_state = dict(group.__dict__)
+    del old_state["anchor"]
+
+    restored = CombatGroup.__new__(CombatGroup)
+    restored.__setstate__(old_state)
+
+    assert restored.anchor is None
+
+
+def test_combat_group_setstate_preserves_existing_anchor() -> None:
+    unit_type = MagicMock(spec=GroundUnitType)
+    wedge = CombatGroup(CombatGroupRole.TANK, unit_type, 5)
+    member = CombatGroup(CombatGroupRole.SHORAD, unit_type, 1)
+    member.anchor = wedge
+
+    restored = CombatGroup.__new__(CombatGroup)
+    restored.__setstate__(dict(member.__dict__))
+
+    assert restored.anchor is wedge
+
+
 def _grp(role: CombatGroupRole, size: int) -> CombatGroup:
     return CombatGroup(role, MagicMock(spec=GroundUnitType), size)
 

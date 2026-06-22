@@ -6,7 +6,7 @@ import logging
 import random
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, TYPE_CHECKING
+from typing import Any, List, Optional, TYPE_CHECKING
 from uuid import UUID
 
 from game.data.units import UnitClass
@@ -55,6 +55,13 @@ class CombatGroup:
         # wedge itself and for unclustered groups (artillery/logi). Spec B reads
         # this to make the cluster maneuver as a unit.
         self.anchor: Optional[CombatGroup] = None
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        # Saves made before the cluster work (dr-588t) have no ``anchor``; pickle
+        # skips ``__init__`` so backfill the default for those old CombatGroups.
+        self.__dict__.update(state)
+        if not hasattr(self, "anchor"):
+            self.anchor = None
 
     def __str__(self) -> str:
         s = f"ROLE : {self.role}\n"
