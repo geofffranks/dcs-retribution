@@ -39,7 +39,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from dcs.terrain.terrain import Terrain
 
@@ -460,6 +460,65 @@ def _offset_meters(lat: float, dlat: float, dlng: float) -> dict:
 
 
 # ----------------------------------------------------------------------------
+# Merge / elevation preservation
+# ----------------------------------------------------------------------------
+
+
+Record = dict[str, Any]
+
+# Elevation sources that are authoritative and must NEVER be overwritten by a
+# re-derive. ``dcs_land_getheight`` comes from the in-game atmosphere probe and
+# is the QFE ground truth; OSM/DEM values are only a fallback for fields the
+# probe never visited. A full re-derive against OSM would otherwise silently
+# reset every probed elevation back to a ~5m-accurate SRTM value.
+PROTECTED_ELEVATION_SOURCES = frozenset({"dcs_land_getheight"})
+
+
+def is_never_attempted(record: Record) -> bool:
+    """True if a record has neither an imagery offset nor a prior derive note.
+
+    A ``notes`` field means an earlier run already tried this airport and
+    found no OSM runway, so ``--fill-missing`` skips it; only airports that
+    have never been derived at all are re-attempted.
+    """
+    return not record.get("imagery_offset_deg") and record.get("notes") is None
+
+
+def preserve_protected_elevation(existing: Record, derived: Record) -> Record:
+    """Return ``derived`` with elevation copied from ``existing`` when the
+    existing elevation comes from a protected (authoritative) source.
+
+    Imagery fields always come from ``derived``; only the elevation pair is
+    protected.
+    """
+    if existing.get("elevation_source") in PROTECTED_ELEVATION_SOURCES:
+        derived = dict(derived)
+        derived["elevation_m"] = existing.get("elevation_m")
+        derived["elevation_source"] = existing.get("elevation_source")
+    return derived
+
+
+def merge_airports(
+    existing: dict[str, Record], derived: dict[str, Record]
+) -> dict[str, Record]:
+    """Merge freshly derived airport records over an existing dataset.
+
+    Airports absent from ``derived`` are kept verbatim (so a partial re-derive
+    never drops them); re-derived airports take their imagery from ``derived``
+    but keep any protected elevation from ``existing``.
+    """
+    merged: dict[str, Record] = dict(existing)
+    for aid, rec in derived.items():
+        existing_rec = existing.get(aid)
+        merged[aid] = (
+            preserve_protected_elevation(existing_rec, rec)
+            if existing_rec is not None
+            else rec
+        )
+    return merged
+
+
+# ----------------------------------------------------------------------------
 # Driver
 # ----------------------------------------------------------------------------
 
@@ -482,14 +541,41 @@ def main(argv: Optional[list[str]] = None) -> int:
         action="store_true",
         help="Print the result to stdout instead of writing a JSON file.",
     )
+    parser.add_argument(
+        "--fill-missing",
+        action="store_true",
+        help="Only derive airports the existing file has never attempted "
+        "(no imagery offset and no prior 'no runway' note). Useful after a "
+        "terrain update adds new airfields, without re-deriving (and risking "
+        "OSM churn on) airfields already imaged.",
+    )
     args = parser.parse_args(argv)
 
     terrain = load_terrain(args.terrain.lower())
     print(f"Loaded terrain: {terrain.name}")
 
+    out_dir = Path(args.out_dir)
+    # Filename must match what airport_imagery.load() looks up: terrain.name
+    # lowercased with spaces stripped (e.g. "SinaiMap" -> "sinaimap.json").
+    out_path = out_dir / f"{terrain.name.lower().replace(' ', '')}.json"
+
+    # Load the existing dataset so a re-derive MERGES into it — preserving
+    # protected elevations and any airports not re-derived — instead of
+    # rebuilding the file from scratch and clobbering probe elevations.
+    existing_airports: dict[str, Record] = {}
+    if out_path.exists():
+        existing_doc = json.loads(out_path.read_text(encoding="utf-8"))
+        existing_airports = existing_doc.get("airports", {})
+
     airports = list(terrain.airport_list())
     if args.only_airport is not None:
         airports = [a for a in airports if args.only_airport.lower() in a.name.lower()]
+    if args.fill_missing:
+        airports = [
+            a
+            for a in airports
+            if is_never_attempted(existing_airports.get(str(a.id), {}))
+        ]
     if not airports:
         print("No airports matched.")
         return 1
@@ -501,6 +587,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         "ODbL (https://www.openstreetmap.org/copyright)",
         "airports": {},
     }
+    derived: dict[str, Record] = {}
 
     # Sort airports up front so the [i/N] progress order, the iteration
     # order, and the resulting JSON's `airports` dict order are all
@@ -518,7 +605,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             # ``derive_airport`` no longer self-filters — guard for future
             # callers that re-introduce a None return.
             continue
-        out["airports"][str(ap.id)] = record
+        derived[str(ap.id)] = record
         offset = record.get("imagery_offset_deg")
         if offset:
             # Compute meters-from-degrees just for the log line; the JSON
@@ -549,6 +636,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         if i < len(airports):
             time.sleep(INTER_QUERY_DELAY_S)
 
+    out["airports"] = merge_airports(existing_airports, derived)
     out["generated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     summary = (
@@ -566,11 +654,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(summary)
         return 0
 
-    out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    # Filename must match what airport_imagery.load() looks up: terrain.name
-    # lowercased with spaces stripped (e.g. "SinaiMap" -> "sinaimap.json").
-    out_path = out_dir / f"{terrain.name.lower().replace(' ', '')}.json"
     # Atomic write: write to a per-run unique tempfile in the same
     # directory, then `Path.replace` it onto the final path. Without this
     # a Ctrl-C (or any exception during `json.dump`) used to leave a
