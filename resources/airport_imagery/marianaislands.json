@@ -5,8 +5,8 @@
         "lat": 14.17437266612625,
         "lng": 145.24109239880622
       },
-      "elevation_m": 181.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 173.4,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 1.0933873749507939e-05,
         "lng": 2.4351193786742442e-05
@@ -40,8 +40,8 @@
         "lat": 15.118931054655581,
         "lng": 145.72912914447548
       },
-      "elevation_m": 65.5,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 65.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 7.254534441791805e-05,
         "lng": 0.00021970552452899028
@@ -115,8 +115,8 @@
         "lat": 14.999193626218325,
         "lng": 145.6191816236229
       },
-      "elevation_m": 81.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 73.2,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 9.373781674426596e-06,
         "lng": 0.00012137637710907256
@@ -150,8 +150,8 @@
         "lat": 13.484779760120237,
         "lng": 144.79682382088177
       },
-      "elevation_m": 82.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 77.8,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.000548239879762491,
         "lng": 0.0011931791182462348
@@ -205,8 +205,8 @@
         "lat": 13.438200572978289,
         "lng": 144.6422396805305
       },
-      "elevation_m": 33.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 28.5,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 1.3477021710173176e-05,
         "lng": -0.0001286305305256974
@@ -240,8 +240,8 @@
         "lat": 13.581703326238712,
         "lng": 144.9310523152917
       },
-      "elevation_m": 164.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 166.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.0005704762387122031,
         "lng": -0.0013867152917157455
@@ -295,8 +295,8 @@
         "lat": 18.123153737446714,
         "lng": 145.76314859232707
       },
-      "elevation_m": 20.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 15.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 7.986255328518155e-05,
         "lng": -0.00013699232707153897
@@ -330,8 +330,8 @@
         "lat": 13.625334083373424,
         "lng": 144.85839856745477
       },
-      "elevation_m": 155.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 159.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -2.743337342359098e-05,
         "lng": -0.00041446745476036995

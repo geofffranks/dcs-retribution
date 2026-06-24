@@ -5,8 +5,8 @@
         "lat": 49.39050758087422,
         "lng": -0.9570741305184313
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 31.5,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Saint Pierre du Mont",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -17,8 +17,8 @@
         "lat": 49.43672083991265,
         "lng": -1.4689704202626874
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 32.5,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Biniville",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -29,8 +29,8 @@
         "lat": 49.351012758382055,
         "lng": -1.0509968030092418
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 31.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Cardonville",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -41,8 +41,8 @@
         "lat": 49.34732697061971,
         "lng": -0.9808090461742173
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 37.7,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Deux Jumeaux",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -53,8 +53,8 @@
         "lat": 49.24191733917208,
         "lng": -0.9716503651769133
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 38.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Chippelle",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -65,8 +65,8 @@
         "lat": 49.4205458197339,
         "lng": -1.2985518171590618
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 34.8,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Beuzeville",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -77,8 +77,8 @@
         "lat": 49.480991385886526,
         "lng": -1.317616283542376
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 22.8,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Azeville",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -89,8 +89,8 @@
         "lat": 49.39637435125804,
         "lng": -1.411155182235463
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 22.1,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Picauville",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -101,8 +101,8 @@
         "lat": 49.26153749658012,
         "lng": -0.8816646149672193
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 32.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Le Molay",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -113,8 +113,8 @@
         "lat": 49.342661664754836,
         "lng": -0.7061596913436651
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 68.1,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Longues-sur-Mer",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -125,8 +125,8 @@
         "lat": 49.175126161395674,
         "lng": -0.4544610309826448
       },
-      "elevation_m": 69.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 57.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.00010688860432850333,
         "lng": 0.00034638098264477835
@@ -200,8 +200,8 @@
         "lat": 49.17510426756479,
         "lng": -0.788930884096903
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 123.4,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Lignerolles",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -212,8 +212,8 @@
         "lat": 49.30396407238038,
         "lng": -0.5647276696292327
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 60.9,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Bazenville",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -224,8 +224,8 @@
         "lat": 49.320275528763496,
         "lng": -0.5172460161137586
       },
-      "elevation_m": 38.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 48.8,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.006043478763494647,
         "lng": 0.06282136611375866
@@ -319,8 +319,8 @@
         "lat": 49.29802146034262,
         "lng": -0.42662120936349784
       },
-      "elevation_m": 38.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 60.7,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.016210589657383423,
         "lng": -0.02780344063650214
@@ -414,8 +414,8 @@
         "lat": 49.251425191037676,
         "lng": -0.5803100867801433
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 58.8,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Rucqueville",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -426,8 +426,8 @@
         "lat": 49.30022766225324,
         "lng": -0.6709513433698048
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 57.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Sommervieu",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -438,8 +438,8 @@
         "lat": 49.27145739352816,
         "lng": -0.5384027723588923
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 53.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Lantheuil",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -450,8 +450,8 @@
         "lat": 49.023804208603515,
         "lng": 1.213260333294736
       },
-      "elevation_m": 140.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 129.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.004964641396483671,
         "lng": 0.006724766705264118
@@ -505,8 +505,8 @@
         "lat": 50.952521061975865,
         "lng": -0.04740146653718857
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 29.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Chailey",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -517,8 +517,8 @@
         "lat": 50.771663998247135,
         "lng": -1.4345304464983542
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 6.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Needs Oar Point",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -529,8 +529,8 @@
         "lat": 50.868196393705816,
         "lng": -0.8690794583456836
       },
-      "elevation_m": 83.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 38.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.03808420629418663,
         "lng": 0.004442108345683593
@@ -564,8 +564,8 @@
         "lat": 49.33659217529467,
         "lng": -1.3793561286586808
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 29.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Cretteville",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -576,8 +576,8 @@
         "lat": 50.84576044283152,
         "lng": -0.7018967159774613
       },
-      "elevation_m": 30.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 14.5,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.013623957168476863,
         "lng": -0.05750738402253874
@@ -711,8 +711,8 @@
         "lat": 50.818496578406325,
         "lng": -0.5911703652684185
       },
-      "elevation_m": 2.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 8.9,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.01714602840633006,
         "lng": -0.06793993473158155
@@ -766,8 +766,8 @@
         "lat": 48.76876226230335,
         "lng": -0.030444785489789856
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 186.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Argentan",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -778,8 +778,8 @@
         "lat": 48.74969186949583,
         "lng": -0.1114572456759587
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 188.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Goulet",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -790,8 +790,8 @@
         "lat": 48.48013889420732,
         "lng": 0.3139826678399547
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 141.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Barville",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -802,8 +802,8 @@
         "lat": 48.52054442562869,
         "lng": 0.25769090498769126
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 152.4,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Essay",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -814,8 +814,8 @@
         "lat": 48.49994064470116,
         "lng": 0.20009083484008564
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 149.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Hauterive",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -826,8 +826,8 @@
         "lat": 50.76247854491049,
         "lng": -1.5143052635347354
       },
-      "elevation_m": 39.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 6.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.042213855089507035,
         "lng": 0.008624763534735402
@@ -901,8 +901,8 @@
         "lat": 48.672282612446025,
         "lng": -0.0021612279088577624
       },
-      "elevation_m": 174.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 180.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.03719573755397221,
         "lng": 0.004886477908857762
@@ -936,8 +936,8 @@
         "lat": 51.23442161497043,
         "lng": -0.9417272996449684
       },
-      "elevation_m": 122.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 111.6,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.00023251497043474956,
         "lng": -0.000957700355031621
@@ -991,8 +991,8 @@
         "lat": 49.649801939027874,
         "lng": -1.4669559496539613
       },
-      "elevation_m": 134.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 134.5,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0003508609721265543,
         "lng": -0.003324050346038776
@@ -1026,8 +1026,8 @@
         "lat": 48.934809673673804,
         "lng": 0.9613079773488514
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 165.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Conches",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -1038,8 +1038,8 @@
         "lat": 51.27036006773908,
         "lng": 0.40469711787712015
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 93.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "West Malling",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -1050,8 +1050,8 @@
         "lat": 48.767348575027604,
         "lng": 2.2050321426614206
       },
-      "elevation_m": 178.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 170.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.007009074972394558,
         "lng": -0.003437392661420624
@@ -1145,8 +1145,8 @@
         "lat": 51.30418280833451,
         "lng": -0.09694273679184803
       },
-      "elevation_m": 169.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 171.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0017512916654922606,
         "lng": 0.0035155867918480327
@@ -1240,8 +1240,8 @@
         "lat": 49.454163142165264,
         "lng": 2.113237670726484
       },
-      "elevation_m": 109.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 101.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.002008892165264342,
         "lng": 0.00483167927351591
@@ -1315,8 +1315,8 @@
         "lat": 49.09328004738536,
         "lng": 2.035435400062556
       },
-      "elevation_m": 89.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 95.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.0006276973853687196,
         "lng": -0.0007045500625562084
@@ -1430,8 +1430,8 @@
         "lat": 49.25276380014871,
         "lng": 2.505931202180293
       },
-      "elevation_m": 89.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 82.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0011639498512892033,
         "lng": 0.014435197819707035
@@ -1465,8 +1465,8 @@
         "lat": 48.75874515187259,
         "lng": 2.0799245172473757
       },
-      "elevation_m": 164.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 160.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.0059461518725854035,
         "lng": 0.02587598275262426
@@ -1520,8 +1520,8 @@
         "lat": 48.46767268271808,
         "lng": 0.037384489526602574
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 157.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Lonrai",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -1532,8 +1532,8 @@
         "lat": 48.4433827530211,
         "lng": -2.10312083605948
       },
-      "elevation_m": 112.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 115.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -2.5203021095876466e-05,
         "lng": 0.000100936059480361
@@ -1567,20 +1567,25 @@
         "lat": 49.368674398777515,
         "lng": -1.2157653368318535
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 13.9,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Brucheville",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
       "runways": []
+    },
+    "50": {
+      "elevation_m": 27.0,
+      "elevation_source": "dcs_land_getheight",
+      "name": "Heathrow"
     },
     "51": {
       "dcs_position": {
         "lat": 49.74630382661085,
         "lng": 0.35610171204267477
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 90.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Fecamp-Benouville",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -1591,8 +1596,8 @@
         "lat": 51.27871915075146,
         "lng": -0.7746799616292835
       },
-      "elevation_m": 73.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 75.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.0033221007514683265,
         "lng": -0.0028124383707165412
@@ -1626,8 +1631,8 @@
         "lat": 50.76174851049877,
         "lng": 0.1714922047291879
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 94.1,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Friston",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -1638,8 +1643,8 @@
         "lat": 50.88434935446339,
         "lng": 0.16135340776807366
       },
-      "elevation_m": 25.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 29.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.023149345536616295,
         "lng": -0.057015607768073656
@@ -1773,8 +1778,8 @@
         "lat": 49.33621470561943,
         "lng": 0.4582801827818856
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 122.6,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Triqueville",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -1785,8 +1790,8 @@
         "lat": 49.818859371582725,
         "lng": 1.9772648945817457
       },
-      "elevation_m": 189.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 166.8,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.0386604215827262,
         "lng": 0.026283505418254416
@@ -1820,8 +1825,8 @@
         "lat": 48.73513988231463,
         "lng": 2.3918260080111655
       },
-      "elevation_m": 87.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 83.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.007428182314626497,
         "lng": -0.05303905801116526
@@ -1895,8 +1900,8 @@
         "lat": 50.91479298604927,
         "lng": -1.653210757430462
       },
-      "elevation_m": 108.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 117.1,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.002431036049266311,
         "lng": -0.008298392569538127
@@ -1970,8 +1975,8 @@
         "lat": 49.87201147905093,
         "lng": 2.3903577838567247
       },
-      "elevation_m": 64.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 58.5,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0011991709490644098,
         "lng": -0.0037005838567245597
@@ -2025,8 +2030,8 @@
         "lat": 49.28318908309748,
         "lng": -1.3002386609557184
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 25.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Meautis",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -2037,8 +2042,8 @@
         "lat": 48.82338421798495,
         "lng": -0.16121462298278127
       },
-      "elevation_m": 170.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 262.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.01734043201504676,
         "lng": 0.04757727298278128
@@ -2072,8 +2077,8 @@
         "lat": 49.38722951805353,
         "lng": 1.178984417531054
       },
-      "elevation_m": 156.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 150.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.0020086180535301423,
         "lng": -0.002822517531054114
@@ -2127,8 +2132,8 @@
         "lat": 49.36426747824487,
         "lng": 0.15724519303450155
       },
-      "elevation_m": 143.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 140.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0009686217551276854,
         "lng": -0.0027276430345015423
@@ -2202,8 +2207,8 @@
         "lat": 49.885014947033746,
         "lng": 1.080428909227712
       },
-      "elevation_m": 103.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 100.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.00020879703374276914,
         "lng": 0.00031704077228789096
@@ -2257,8 +2262,8 @@
         "lat": 48.74921708495053,
         "lng": -0.5956208525473119
       },
-      "elevation_m": 194.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 198.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0005191650494680289,
         "lng": 0.0009726525473119363
@@ -2292,8 +2297,8 @@
         "lat": 48.66814754519804,
         "lng": -1.3806385176892801
       },
-      "elevation_m": 6.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 14.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.005622945198041407,
         "lng": -0.023093982310719685
@@ -2367,8 +2372,8 @@
         "lat": 51.41805555915376,
         "lng": 0.39674804950306186
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 54.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Gravesend",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -2379,8 +2384,8 @@
         "lat": 49.0963809175986,
         "lng": 0.7969257495007953
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 149.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Beaumont-le-Roger",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -2391,8 +2396,8 @@
         "lat": 49.015628563793015,
         "lng": 0.4988601862904712
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 181.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Broglie",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -2403,8 +2408,8 @@
         "lat": 49.10443271811326,
         "lng": 0.5984377154845987
       },
-      "elevation_m": 164.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 155.8,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.001973418113259129,
         "lng": -0.03286731548459876
@@ -2438,8 +2443,8 @@
         "lat": 49.36457490203241,
         "lng": -1.0068842015666881
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 24.8,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Cricqueville-en-Bessin",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -2450,8 +2455,8 @@
         "lat": 48.89128447653115,
         "lng": 1.2683381361359032
       },
-      "elevation_m": 147.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 145.6,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.00639182346885292,
         "lng": -0.01761073613590325
@@ -2505,8 +2510,8 @@
         "lat": 51.33001010340253,
         "lng": 0.031649673013102265
       },
-      "elevation_m": 182.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 173.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0009684465974686418,
         "lng": 0.0007999269868977366
@@ -2540,8 +2545,8 @@
         "lat": 51.342410929445364,
         "lng": 1.3461802905385245
       },
-      "elevation_m": 56.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 48.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.00027872944536966315,
         "lng": 4.765946147533562e-05
@@ -2575,8 +2580,8 @@
         "lat": 51.30578809433573,
         "lng": 0.6015785349947236
       },
-      "elevation_m": 124.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 170.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.02704560566426295,
         "lng": -0.00044408499472359253
@@ -2610,8 +2615,8 @@
         "lat": 51.082915241960585,
         "lng": 1.0193710724868763
       },
-      "elevation_m": 83.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 67.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.026173708039415544,
         "lng": 0.03376837751312367
@@ -2665,8 +2670,8 @@
         "lat": 50.138133309239585,
         "lng": 1.8378934199249433
       },
-      "elevation_m": 67.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 66.1,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.005371140760416893,
         "lng": -0.0059478199249431984
@@ -2740,8 +2745,8 @@
         "lat": 50.72884502303366,
         "lng": 2.2323034366160277
       },
-      "elevation_m": 76.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 65.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.002242773033657386,
         "lng": 0.00041796338397226407
@@ -2795,8 +2800,8 @@
         "lat": 50.62059552636606,
         "lng": 2.653471364936814
       },
-      "elevation_m": 16.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 40.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.0020655763660641924,
         "lng": -0.011051514936813778
@@ -2850,8 +2855,8 @@
         "lat": 51.124640573462756,
         "lng": 0.7056411647996468
       },
-      "elevation_m": 29.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 28.9,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.030346073462752088,
         "lng": 0.035067085200353176
@@ -2925,8 +2930,8 @@
         "lat": 51.03038351169997,
         "lng": 2.2569821646585058
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 8.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Dunkirk-Mardyck",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -2937,8 +2942,8 @@
         "lat": 49.20216745983242,
         "lng": -1.5083427559995528
       },
-      "elevation_m": 26.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 20.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.001457140167580917,
         "lng": 0.004373905999552896
@@ -2972,8 +2977,8 @@
         "lat": 51.15629374655389,
         "lng": 0.6443523647863055
       },
-      "elevation_m": 22.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 20.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0004233034461051943,
         "lng": -0.0017356647863054908
@@ -3047,8 +3052,8 @@
         "lat": 51.39035819369573,
         "lng": 0.8479358872933521
       },
-      "elevation_m": 14.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 10.4,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.012719756304264251,
         "lng": -0.0012574872933520664
@@ -3082,8 +3087,8 @@
         "lat": 51.11174203830935,
         "lng": 1.1580601815844402
       },
-      "elevation_m": 143.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 165.6,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.033697911690644844,
         "lng": 0.05150841841555964
@@ -3137,8 +3142,8 @@
         "lat": 49.435785405717056,
         "lng": -2.5959567091201112
       },
-      "elevation_m": 102.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 78.8,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.0008639557170511125,
         "lng": -0.007613940879888759
@@ -3192,8 +3197,8 @@
         "lat": 49.207677316363316,
         "lng": -2.1996879821357314
       },
-      "elevation_m": 81.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 74.9,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0002610836366869762,
         "lng": 0.004173482135731543
@@ -3267,8 +3272,8 @@
         "lat": 49.706758746540565,
         "lng": -2.2145940168221565
       },
-      "elevation_m": 88.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 64.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -4.64965405697626e-05,
         "lng": -0.0002809331778435009
@@ -3402,8 +3407,8 @@
         "lat": 51.18285837011379,
         "lng": 0.6886998596675985
       },
-      "elevation_m": 22.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 33.4,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.02614132011379411,
         "lng": -0.04608315966759846
@@ -3497,8 +3502,8 @@
         "lat": 50.39666164932981,
         "lng": 2.3506912298070914
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 137.6,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Saint-Pol-Bryas",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -3509,8 +3514,8 @@
         "lat": 51.55279100730003,
         "lng": -0.41928548655082826
       },
-      "elevation_m": 36.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 40.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 7.504269997582469e-05,
         "lng": 0.0002996865508282931
@@ -3544,8 +3549,8 @@
         "lat": 50.79006918791396,
         "lng": -1.7009791996115895
       },
-      "elevation_m": 63.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 60.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.001937887913953773,
         "lng": -0.004733000388410513
@@ -3579,8 +3584,8 @@
         "lat": 49.364463364654796,
         "lng": -0.8734883568799777
       },
-      "elevation_m": 59.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 19.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.009771164654793552,
         "lng": 0.029926256879977742
@@ -3614,8 +3619,8 @@
         "lat": 50.6784712963907,
         "lng": -1.1108024615526844
       },
-      "elevation_m": 9.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 25.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.00039374639069933437,
         "lng": 0.0010857615526844722

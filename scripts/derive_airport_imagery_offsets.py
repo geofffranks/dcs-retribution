@@ -579,7 +579,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         f"{out_path.suffix}.{os.getpid()}.{time.monotonic_ns()}.tmp"
     )
     try:
-        with tmp_path.open("w") as f:
+        with tmp_path.open("w", encoding="utf-8") as f:
             json.dump(out, f, indent=2, sort_keys=True)
             f.write("\n")
         tmp_path.replace(out_path)

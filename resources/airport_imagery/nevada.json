@@ -5,8 +5,8 @@
         "lat": 36.58381897169215,
         "lng": -115.6764424858488
       },
-      "elevation_m": 955.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 952.9,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0001353783078457127,
         "lng": -0.003827814151208031
@@ -80,8 +80,8 @@
         "lat": 35.156102639982656,
         "lng": -114.55945187290305
       },
-      "elevation_m": 215.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 200.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.0014886399826536945,
         "lng": 0.00011962290305689294
@@ -135,8 +135,8 @@
         "lat": 37.787355566372085,
         "lng": -114.41991121201858
       },
-      "elevation_m": 1469.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 1467.7,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 4.633362791395257e-05,
         "lng": -5.237981426375882e-06
@@ -170,8 +170,8 @@
         "lat": 36.833119135858084,
         "lng": -114.05590700996973
       },
-      "elevation_m": 602.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 566.5,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 2.196414191502072e-05,
         "lng": -3.8090030272996955e-05
@@ -205,8 +205,8 @@
         "lat": 38.37978563339467,
         "lng": -118.0966766611066
       },
-      "elevation_m": 1388.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 1390.5,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -8.973339466677999e-05,
         "lng": 5.586110658839516e-05
@@ -240,8 +240,8 @@
         "lat": 36.21347177940649,
         "lng": -115.19476766608699
       },
-      "elevation_m": 671.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 679.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -1.0329406492814996e-05,
         "lng": -0.00012128391301757802
@@ -315,8 +315,8 @@
         "lat": 37.10199574631143,
         "lng": -116.31284622428223
       },
-      "elevation_m": 1534.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 1541.4,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.00010185368856951982,
         "lng": -1.582571778158126e-05
@@ -350,8 +350,8 @@
         "lat": 38.06243087182406,
         "lng": -117.08328585574216
       },
-      "elevation_m": 1651.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 1644.1,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.004364171824065011,
         "lng": -0.006238744257842654
@@ -405,8 +405,8 @@
         "lat": 37.7988749905105,
         "lng": -116.7807920733868
       },
-      "elevation_m": 1690.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 1686.8,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -1.5890510496774368e-05,
         "lng": 6.682338681684996e-05
@@ -440,8 +440,8 @@
         "lat": 37.23317938433876,
         "lng": -115.79233552379732
       },
-      "elevation_m": 1367.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 1369.9,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.00011213433875667533,
         "lng": 7.59237973255722e-05
@@ -695,8 +695,8 @@
         "lat": 36.076410032889456,
         "lng": -115.14463202319168
       },
-      "elevation_m": 665.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 661.4,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -1.918288946001212e-05,
         "lng": -0.001031426808324909
@@ -830,8 +830,8 @@
         "lat": 36.235224110883344,
         "lng": -115.03300055101853
       },
-      "elevation_m": 569.1,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 561.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -5.081088334435435e-05,
         "lng": -8.644898146314972e-05
@@ -885,8 +885,8 @@
         "lat": 36.86100291276837,
         "lng": -116.78641750314196
       },
-      "elevation_m": 962.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 967.1,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.00013033723162436672,
         "lng": 5.603141971732839e-06
@@ -920,8 +920,8 @@
         "lat": 35.948667303860894,
         "lng": -114.86181818697374
       },
-      "elevation_m": 671.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 646.7,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.0023094038608917344,
         "lng": 0.0007689869737390609
@@ -995,8 +995,8 @@
         "lat": 36.31106048427465,
         "lng": -114.46389937947889
       },
-      "elevation_m": 468.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 472.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -8.734274643984463e-06,
         "lng": 3.292947889121933e-05
@@ -1030,8 +1030,8 @@
         "lat": 35.97399439800046,
         "lng": -115.13305233940493
       },
-      "elevation_m": 739.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 759.4,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.002031548000459793,
         "lng": -0.00238221059507282
@@ -1085,8 +1085,8 @@
         "lat": 35.76918684110657,
         "lng": -115.3295683377749
       },
-      "elevation_m": 864.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 860.9,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.00029789110656253115,
         "lng": -0.00023606222509897634

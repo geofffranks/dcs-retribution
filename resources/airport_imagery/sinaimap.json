@@ -5,8 +5,8 @@
         "lat": 30.4257422763297,
         "lng": 32.33538373108041
       },
-      "elevation_m": 10.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 2.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.00014192367029863817,
         "lng": -1.933108040930165e-05
@@ -60,8 +60,8 @@
         "lat": 29.94081706116276,
         "lng": 34.934127918241174
       },
-      "elevation_m": 445.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 437.2,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.0005043611627613132,
         "lng": 0.0036483817588219836
@@ -115,8 +115,8 @@
         "lat": 30.243533971933505,
         "lng": 32.49117859709286
       },
-      "elevation_m": 475.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 4.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0012627780664935528,
         "lng": 0.0015567529071418562
@@ -170,8 +170,8 @@
         "lat": 31.260615391006002,
         "lng": 34.639945223020725
       },
-      "elevation_m": 221.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 193.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.03164374100600398,
         "lng": 0.023713726979273986
@@ -245,8 +245,8 @@
         "lat": 30.07255120185218,
         "lng": 31.833299927783255
       },
-      "elevation_m": 254.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 228.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.00012310185217501157,
         "lng": -8.57778325524805e-06
@@ -340,8 +340,8 @@
         "lat": 30.96520138948366,
         "lng": 31.43150916813658
       },
-      "elevation_m": 6.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 2.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0003690605163413352,
         "lng": -0.00034636813657584753
@@ -435,8 +435,8 @@
         "lat": 30.5948228562448,
         "lng": 31.66457679254901
       },
-      "elevation_m": 14.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 2.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -1.3706244796907185e-05,
         "lng": -7.542549010253197e-06
@@ -490,8 +490,8 @@
         "lat": 30.398674889513142,
         "lng": 31.607280168854185
       },
-      "elevation_m": 25.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 28.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0008560104868600149,
         "lng": -0.012095268854185548
@@ -585,8 +585,8 @@
         "lat": 30.10898821141715,
         "lng": 31.434819911920865
       },
-      "elevation_m": 116.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 120.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 2.9288582851449974e-05,
         "lng": -8.561920864735839e-06
@@ -660,8 +660,8 @@
         "lat": 30.108373279464438,
         "lng": 30.89565663249415
       },
-      "elevation_m": 168.5,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 134.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.0002087794644367591,
         "lng": 7.861750585291816e-05
@@ -755,8 +755,8 @@
         "lat": 30.33424893136222,
         "lng": 31.44657887106499
       },
-      "elevation_m": 38.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 47.1,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -4.3131362222226244e-05,
         "lng": -0.00012302106499006982
@@ -830,8 +830,8 @@
         "lat": 30.5753855364908,
         "lng": 32.09627048269147
       },
-      "elevation_m": 13.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 5.7,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 1.2263509201915213e-05,
         "lng": -0.00010208269147682358
@@ -925,8 +925,8 @@
         "lat": 31.760478866239744,
         "lng": 34.72533107165004
       },
-      "elevation_m": 38.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 30.6,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0009074837602582875,
         "lng": 0.008262828349963058
@@ -1000,8 +1000,8 @@
         "lat": 31.901787764627187,
         "lng": 34.692886494872596
       },
-      "elevation_m": 12.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 10.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.0009530646271862508,
         "lng": -0.0005174448725995262
@@ -1095,8 +1095,8 @@
         "lat": 32.114672425704974,
         "lng": 34.78227946102635
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 6.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Sde Dov",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -1107,8 +1107,8 @@
         "lat": 31.83602073967761,
         "lng": 34.81782758845188
       },
-      "elevation_m": 53.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 43.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0016671103223906414,
         "lng": 0.00914251154812007
@@ -1182,8 +1182,8 @@
         "lat": 32.00702914949815,
         "lng": 34.89310022003211
       },
-      "elevation_m": 41.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 30.1,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.008253450501847226,
         "lng": -0.016241720032112994
@@ -1317,8 +1317,8 @@
         "lat": 28.685165088926688,
         "lng": 34.06262839349904
       },
-      "elevation_m": 1332.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 1297.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.00013243892668768353,
         "lng": 0.0017881565009574274
@@ -1372,8 +1372,8 @@
         "lat": 28.89953573539214,
         "lng": 33.20233681840875
       },
-      "elevation_m": 20.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 0.9,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 5.896460786303237e-05,
         "lng": 2.8231591244320953e-05
@@ -1427,8 +1427,8 @@
         "lat": 30.999770130384587,
         "lng": 32.55222105865159
       },
-      "elevation_m": null,
-      "elevation_source": null,
+      "elevation_m": 36.5,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": null,
       "name": "Baluza",
       "notes": "No runway features found in OSM within 5000m of DCS airport position.",
@@ -1439,8 +1439,8 @@
         "lat": 30.19463747616868,
         "lng": 33.41282936838139
       },
-      "elevation_m": 397.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 373.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 6.28238313211682e-05,
         "lng": -0.00010816838138794083
@@ -1474,8 +1474,8 @@
         "lat": 31.03787774595054,
         "lng": 33.81909112485601
       },
-      "elevation_m": 37.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 94.9,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.035353404049459414,
         "lng": 0.016769875143992863
@@ -1529,8 +1529,8 @@
         "lat": 30.795110976449358,
         "lng": 32.04254612904293
       },
-      "elevation_m": 7.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 2.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.00011497355064449266,
         "lng": 3.322095706437267e-05
@@ -1584,8 +1584,8 @@
         "lat": 31.073010747285668,
         "lng": 34.14836022697312
       },
-      "elevation_m": 101.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 128.8,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.00015140271433367047,
         "lng": 0.0007365730268773518
@@ -1659,8 +1659,8 @@
         "lat": 30.312374999321506,
         "lng": 30.874447118314365
       },
-      "elevation_m": 10.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 14.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -7.479932150644686e-05,
         "lng": 0.00019498168563814033
@@ -1754,8 +1754,8 @@
         "lat": 31.04342220476145,
         "lng": 30.66437616379849
       },
-      "elevation_m": 4.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 3.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 5.3545238550611884e-05,
         "lng": 2.228620151001337e-05
@@ -1809,8 +1809,8 @@
         "lat": 29.197907257252293,
         "lng": 31.019000871104783
       },
-      "elevation_m": 31.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 30.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 1.3942747706607861e-05,
         "lng": -9.711047859184418e-07
@@ -1904,8 +1904,8 @@
         "lat": 30.83703774576258,
         "lng": 30.93601919429494
       },
-      "elevation_m": 10.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 6.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.00053879576257998,
         "lng": -0.00084644429493963
@@ -1999,8 +1999,8 @@
         "lat": 30.91690173704666,
         "lng": 29.693893274246562
       },
-      "elevation_m": 54.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 26.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0012314629533385357,
         "lng": 0.001955675753436026
@@ -2134,8 +2134,8 @@
         "lat": 28.101046835346832,
         "lng": 30.729652642472914
       },
-      "elevation_m": 37.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 38.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.00020246465316731133,
         "lng": -0.00013929247291599722
@@ -2229,8 +2229,8 @@
         "lat": 30.538232463698623,
         "lng": 30.552675382286225
       },
-      "elevation_m": 23.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 24.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.004885286301377079,
         "lng": 0.014691117713773849
@@ -2304,8 +2304,8 @@
         "lat": 27.176465154028918,
         "lng": 33.791690932507805
       },
-      "elevation_m": 16.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 13.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -5.34040289181803e-05,
         "lng": 4.317492198424588e-06
@@ -2379,8 +2379,8 @@
         "lat": 30.822325348638337,
         "lng": 30.192399232543647
       },
-      "elevation_m": 6.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 8.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.005195648638338213,
         "lng": -0.0023601325436466425
@@ -2434,8 +2434,8 @@
         "lat": 30.598815164187613,
         "lng": 32.23458226899419
       },
-      "elevation_m": 15.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 3.5,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 7.07858123867311e-05,
         "lng": -0.0001032689941879994
@@ -2489,8 +2489,8 @@
         "lat": 29.553643769339615,
         "lng": 30.89350272635297
       },
-      "elevation_m": -1.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 2.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0007788806603841181,
         "lng": 0.0033978236470275647
@@ -2544,8 +2544,8 @@
         "lat": 29.727039433583847,
         "lng": 35.01402358113399
       },
-      "elevation_m": 87.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 69.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.00016821641615294425,
         "lng": 0.0001131188660110638
@@ -2599,8 +2599,8 @@
         "lat": 27.97873487228964,
         "lng": 34.393276597715
       },
-      "elevation_m": 46.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 30.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.0027618722896356473,
         "lng": 0.0033448022849995596
@@ -2714,8 +2714,8 @@
         "lat": 28.97101745787509,
         "lng": 31.698666924011903
       },
-      "elevation_m": 324.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 300.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.00045269212491305666,
         "lng": -0.0021806740119032497
@@ -2770,7 +2770,7 @@
         "lng": 33.12103079431158
       },
       "elevation_m": 355.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0010412143597484658,
         "lng": 0.001743505688423852
@@ -2804,8 +2804,8 @@
         "lat": 30.579002733754336,
         "lng": 31.129037127782194
       },
-      "elevation_m": 11.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 10.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 4.791624566280461e-05,
         "lng": -2.9377782194472957e-05
@@ -2839,8 +2839,8 @@
         "lat": 33.82447381491309,
         "lng": 35.48323230879578
       },
-      "elevation_m": 9.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 6.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.011964864913089457,
         "lng": 0.0087296912042234
@@ -2914,8 +2914,8 @@
         "lat": 28.371021840276512,
         "lng": 36.60614845895119
       },
-      "elevation_m": 777.5,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 775.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.004204609723487351,
         "lng": 0.029669641048805317
@@ -3029,8 +3029,8 @@
         "lat": 33.395471438532034,
         "lng": 36.51020243875564
       },
-      "elevation_m": 616.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 611.3,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.03005831146796112,
         "lng": 0.008144061244358625
@@ -3084,8 +3084,8 @@
         "lat": 33.477648745175614,
         "lng": 36.22362844746445
       },
-      "elevation_m": 720.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 729.2,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -9.179517561364037e-05,
         "lng": -0.0002016974644476477
@@ -3119,8 +3119,8 @@
         "lat": 30.409932196130313,
         "lng": 33.14974179543318
       },
-      "elevation_m": 318.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 305.9,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 0.0015158038696867493,
         "lng": 0.010297054566827057
@@ -3214,8 +3214,8 @@
         "lat": 32.66646845217573,
         "lng": 35.184092116743244
       },
-      "elevation_m": 41.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 30.5,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.007209252175734093,
         "lng": -0.009159216743242382
@@ -3289,8 +3289,8 @@
         "lat": 32.5971428803004,
         "lng": 35.23021230524634
       },
-      "elevation_m": 61.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 40.5,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 7.026969959866847e-05,
         "lng": -0.0015678552463356255
@@ -3324,8 +3324,8 @@
         "lat": 32.440849079460456,
         "lng": 35.00751090857745
       },
-      "elevation_m": 30.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 14.6,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 8.770539544400435e-06,
         "lng": 0.0001669414225489163
@@ -3359,8 +3359,8 @@
         "lat": 29.588023741651963,
         "lng": 34.77828537323097
       },
-      "elevation_m": 735.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 709.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.00010714165196290537,
         "lng": -0.00013247323096976515
@@ -3394,8 +3394,8 @@
         "lat": 30.343685591346564,
         "lng": 36.14740879671608
       },
-      "elevation_m": 865.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 871.5,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -6.399134656476235e-05,
         "lng": 0.00014825328392475967
@@ -3429,8 +3429,8 @@
         "lat": 33.07893692275935,
         "lng": 36.54070418612152
       },
-      "elevation_m": 735.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 715.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.01289392275934631,
         "lng": 0.030637063878479864
@@ -3479,13 +3479,18 @@
         }
       ]
     },
+    "56": {
+      "elevation_m": 795.0,
+      "elevation_source": "dcs_land_getheight",
+      "name": "TabukHeliBase"
+    },
     "6": {
       "dcs_position": {
         "lat": 30.329071248088837,
         "lng": 32.26748782838741
       },
-      "elevation_m": 22.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 8.5,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -1.1498088838379772e-05,
         "lng": -9.637838740417237e-05
@@ -3539,8 +3544,8 @@
         "lat": 31.238603664757136,
         "lng": 34.6585041947592
       },
-      "elevation_m": 221.0,
-      "elevation_source": "osm_aerodrome_ele",
+      "elevation_m": 209.2,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.009632014757137597,
         "lng": 0.005154755240795339
@@ -3614,8 +3619,8 @@
         "lat": 31.208342674804136,
         "lng": 35.01207505614202
       },
-      "elevation_m": 392.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 397.2,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": 9.892519586429671e-05,
         "lng": 0.0005293438579840881
@@ -3709,8 +3714,8 @@
         "lat": 30.777574063114674,
         "lng": 34.666145829733864
       },
-      "elevation_m": 640.0,
-      "elevation_source": "open_elevation_dem",
+      "elevation_m": 619.0,
+      "elevation_source": "dcs_land_getheight",
       "imagery_offset_deg": {
         "lat": -0.002919963114674573,
         "lng": 0.001400320266142785
