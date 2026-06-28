@@ -21,9 +21,3 @@ livery_set:
   - HR 393EH 334
   - HR 393EH 335
   - HR 393EH 336
-mission_types:
-  - BAI
-  - CAS
-  - DEAD
-  - Escort
-  - OCA/Aircraft

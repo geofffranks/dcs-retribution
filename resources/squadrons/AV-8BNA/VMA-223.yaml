@@ -10,13 +10,3 @@ bases:
     shore: true
     lha: true
 livery: VMA-223D
-mission_types:
-  - Anti-ship
-  - BAI
-  - CAS
-  - DEAD
-  - OCA/Aircraft
-  - OCA/Runway
-  - SEAD
-  - SEAD Escort
-  - Strike

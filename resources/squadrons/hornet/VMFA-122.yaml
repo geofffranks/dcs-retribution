@@ -9,18 +9,3 @@ livery: VMFA-122 high visibility
 bases:
   shore: true
   carrier: true
-mission_types:
-  - Anti-ship
-  - BAI
-  - BARCAP
-  - CAS
-  - DEAD
-  - Escort
-  - Intercept
-  - OCA/Aircraft
-  - OCA/Runway
-  - SEAD
-  - SEAD Escort
-  - Strike
-  - Fighter sweep
-  - TARCAP

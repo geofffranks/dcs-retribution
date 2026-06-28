@@ -6,6 +6,3 @@ country: France
 role: Combat Helicopter
 aircraft: SA 342L Gazelle
 livery: Combat
-mission_types:
-  - CAS
-  - OCA/Aircraft

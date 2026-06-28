@@ -10,9 +10,3 @@ livery_set:
   - US 1-17 A 079
   - US 1-17 A 115
   - US 1-17 A 344
-mission_types:
-  - BAI
-  - CAS
-  - DEAD
-  - Escort
-  - OCA/Aircraft

@@ -5,10 +5,3 @@ country: North Korea
 role: Air Superiority Fighter
 aircraft: MiG-21bis Fishbed-N
 livery: "dprk - 2014 - 34"
-mission_types:
-  - BARCAP
-  - TARCAP
-  - Escort
-  - Intercept
-  - Fighter sweep
-  - TARCAP

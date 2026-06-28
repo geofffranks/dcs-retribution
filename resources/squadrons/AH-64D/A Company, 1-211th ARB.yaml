@@ -6,7 +6,3 @@ country: USA
 role: Attack Helicopter
 aircraft: AH-64D Apache Longbow
 livery: The Air Pirates 1-211th ARB
-mission_types:
-  - CAS
-  - BAI
-  - OCA/Aircraft

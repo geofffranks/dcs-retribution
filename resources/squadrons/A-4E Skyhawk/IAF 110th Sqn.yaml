@@ -9,17 +9,4 @@ bases:
   carrier: false
   shore: true
 livery: International Israel
-mission_types:
-  - BAI
-  - BARCAP
-  - CAS
-  - DEAD
-  - Escort
-  - OCA/Aircraft
-  - OCA/Runway
-  - SEAD
-  - SEAD Escort
-  - Strike
-  - Fighter sweep
-  - TARCAP
 # http://skyhawk.org/article-unit/iaf-north-squadron

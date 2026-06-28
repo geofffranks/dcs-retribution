@@ -5,16 +5,3 @@ country: USA
 role: Carrier-based Attack
 aircraft: A-6A Intruder
 livery: VA-196 Main Battery NK - HD 412 - HiVis
-mission_types:
-  - BAI
-  - BARCAP
-  - CAS
-  - DEAD
-  - Escort
-  - OCA/Aircraft
-  - OCA/Runway
-  - SEAD
-  - SEAD Escort
-  - Strike
-  - Fighter sweep
-  - TARCAP

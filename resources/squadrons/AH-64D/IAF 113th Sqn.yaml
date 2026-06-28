@@ -6,6 +6,3 @@ country: Israel
 role: Attack Helicopter
 aircraft: AH-64D Apache Longbow
 livery: standard
-mission_types:
-  - CAS
-  - BAI

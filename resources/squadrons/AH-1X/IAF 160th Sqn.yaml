@@ -6,7 +6,4 @@ country: Israel
 role: Attack Helicopter
 aircraft: AH-1W SuperCobra
 livery: ah-64_d_isr
-mission_types:
-  - CAS
-  - BAI
 

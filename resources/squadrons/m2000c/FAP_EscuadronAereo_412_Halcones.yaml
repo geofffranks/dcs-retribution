@@ -5,14 +5,3 @@ country: Peru
 role: Fighter
 aircraft: Mirage 2000C
 livery: Peru052
-mission_types:
-  - BARCAP
-  - Escort
-  - Intercept
-  - Fighter sweep
-  - TARCAP
-  - BAI
-  - CAS
-  - OCA/Aircraft
-  - OCA/Runway
-  - Strike

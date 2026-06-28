@@ -5,10 +5,3 @@ country: Vietnam
 role: Air Superiority Fighter
 aircraft: MiG-19P Farmer-B
 livery: "CC_NV925th"
-mission_types:
-  - BARCAP
-  - TARCAP
-  - Escort
-  - Intercept
-  - Fighter sweep
-  - TARCAP

@@ -5,11 +5,3 @@ country: Third Reich
 role: Fighter
 aircraft: Bf 109 K-4 Kurfürst
 livery: Bf-109 K4 Jagdgeschwader 53
-mission_types:
-  - CAS
-  - Escort
-  - Intercept
-  - OCA/Aircraft
-  - Fighter sweep
-  - BARCAP
-  - TARCAP

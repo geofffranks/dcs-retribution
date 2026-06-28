@@ -6,10 +6,3 @@ country: Syria
 role: Air Superiority Fighter
 aircraft: MiG-29S Fulcrum-C
 livery: Algerian AF FC-16
-mission_types:
-  - BARCAP
-  - TARCAP
-  - Escort
-  - Intercept
-  - Fighter sweep
-  - TARCAP

@@ -6,7 +6,3 @@ country: USA
 role: Attack Helicopter
 aircraft: AH-64D Apache Longbow
 livery: Gunslingers 2-159th ARB
-mission_types:
-  - CAS
-  - BAI
-  - OCA/Aircraft

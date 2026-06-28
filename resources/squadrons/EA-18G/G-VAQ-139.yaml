@@ -6,6 +6,3 @@ country: USA
 role: Strike Fighter
 aircraft: EA-18G Growler
 livery: "*VAQ-139 NA501"
-mission_types:
-  - SEAD
-  - SEAD Escort

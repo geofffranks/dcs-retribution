@@ -6,9 +6,3 @@ country: Israel
 role: Air Superiority Fighter
 aircraft: F-4E Phantom II
 livery: "af standard"
-mission_types:
-  - BARCAP
-  - Escort
-  - Intercept
-  - Fighter sweep
-  - TARCAP

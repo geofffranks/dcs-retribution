@@ -6,5 +6,3 @@ country: USA
 role: Tanker
 aircraft: S-3B Tanker
 livery: usaf standard
-mission_types:
-  - Refueling

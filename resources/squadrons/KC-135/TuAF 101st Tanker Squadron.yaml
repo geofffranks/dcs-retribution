@@ -6,5 +6,3 @@ country: Turkey
 role: Air-to-Air Refueling
 aircraft: KC-135 Stratotanker
 livery: TurAF Standard
-mission_types:
-  - Refueling

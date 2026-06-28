@@ -5,11 +5,3 @@ country: USA
 role: Strategic Bomber
 aircraft: B-52H Stratofortress
 livery: USAF - 70s - South East Asia
-mission_types:
-  - Anti-ship
-  - BAI
-  - CAS
-  - DEAD
-  - OCA/Aircraft
-  - OCA/Runway
-  - Strike

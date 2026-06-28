@@ -5,11 +5,3 @@ country: Third Reich
 role: Fighter
 aircraft: Fw 190 D-9 Dora
 livery: FW-190D9_JG54
-mission_types:
-  - CAS
-  - Escort
-  - Intercept
-  - OCA/Aircraft
-  - Fighter sweep
-  - BARCAP
-  - TARCAP

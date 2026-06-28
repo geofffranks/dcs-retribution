@@ -6,7 +6,3 @@ country: The Netherlands
 role: Attack Helicopter
 aircraft: AH-64D Apache Longbow
 livery: 301 Squadron Redskins Netherlands
-mission_types:
-  - CAS
-  - BAI
-  - OCA/Aircraft

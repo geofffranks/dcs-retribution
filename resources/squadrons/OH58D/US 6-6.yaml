@@ -9,9 +9,3 @@ livery_set:
   - US 6-6 C 179
   - US 6-6 C 587
   - US 6-6 C 971
-mission_types:
-  - BAI
-  - CAS
-  - DEAD
-  - Escort
-  - OCA/Aircraft

@@ -6,7 +6,3 @@ country: USA
 role: Attack Helicopter
 aircraft: AH-64D Apache Longbow
 livery: Avengers 1-227th ARB
-mission_types:
-  - CAS
-  - BAI
-  - OCA/Aircraft

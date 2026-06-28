@@ -8,18 +8,5 @@ bases:
   carrier: true
   shore: true
 livery: USN VA-55 -Warhorses- (USS HANCOCK 1973)
-mission_types:
-  - BAI
-  - BARCAP
-  - CAS
-  - DEAD
-  - Escort
-  - OCA/Aircraft
-  - OCA/Runway
-  - SEAD
-  - SEAD Escort
-  - Strike
-  - Fighter sweep
-  - TARCAP
 players:
   - Mad Max

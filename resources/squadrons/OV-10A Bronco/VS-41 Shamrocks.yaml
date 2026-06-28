@@ -6,9 +6,3 @@ country: USA
 role: COIN / FAC /Light Attack
 aircraft: OV-10A Bronco
 livery: VS-41 Shamrocks
-mission_types:
-  - BAI
-  - CAS
-  - DEAD
-  - OCA/Aircraft
-  - Strike

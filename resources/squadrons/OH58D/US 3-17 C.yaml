@@ -10,9 +10,3 @@ livery_set:
   - US 3-17 C 179 Presley Marie
   - US 3-17 C 561 Ariel
   - US 3-17 C 976 Jenny
-mission_types:
-  - BAI
-  - CAS
-  - DEAD
-  - Escort
-  - OCA/Aircraft

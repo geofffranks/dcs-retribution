@@ -9,16 +9,3 @@ bases:
   carrier: true
   shore: true
 livery: USMC VMA-124 Memphis Marines
-mission_types:
-  - BAI
-  - BARCAP
-  - CAS
-  - DEAD
-  - Escort
-  - OCA/Aircraft
-  - OCA/Runway
-  - SEAD
-  - SEAD Escort
-  - Strike
-  - Fighter sweep
-  - TARCAP

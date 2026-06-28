@@ -6,14 +6,3 @@ country: Iraq
 role: Multirole Fighter
 aircraft: Mirage-F1EQ
 livery: Iraq Air Force Blue Scheme
-mission_types:
-  - BARCAP
-  - Escort
-  - Intercept
-  - Fighter sweep
-  - TARCAP
-  - BAI
-  - CAS
-  - OCA/Aircraft
-  - OCA/Runway
-  - Strike

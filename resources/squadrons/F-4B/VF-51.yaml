@@ -6,14 +6,3 @@ country: USA
 role: Fighter-Bomber
 aircraft: F-4B Phantom II
 livery: "VF-51 100 USS CORAL SEA"
-mission_types:
-  - BAI
-  - BARCAP
-  - CAS
-  - DEAD
-  - Escort
-  - OCA/Aircraft
-  - OCA/Runway
-  - Strike
-  - Fighter sweep
-  - TARCAP

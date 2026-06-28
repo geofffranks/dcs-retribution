@@ -5,18 +5,3 @@ country: Australia
 role: Fighter Bomber
 aircraft: F-4E-45MC Phantom II
 livery: RAAF-97203_SEA
-mission_types:
-  - Anti-ship
-  - BAI
-  - BARCAP
-  - CAS
-  - DEAD
-  - Escort
-  - Intercept
-  - OCA/Aircraft
-  - OCA/Runway
-  - SEAD
-  - SEAD Escort
-  - Strike
-  - Fighter sweep
-  - TARCAP

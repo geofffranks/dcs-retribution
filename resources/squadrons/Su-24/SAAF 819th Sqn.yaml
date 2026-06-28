@@ -6,11 +6,3 @@ country: Syria
 role: Bomber
 aircraft: Su-24M Fencer-D
 livery: "Syrian Air Force"
-mission_types:
-  - BAI
-  - CAS
-  - DEAD
-  - SEAD
-  - OCA/Aircraft
-  - OCA/Runway
-  - Strike

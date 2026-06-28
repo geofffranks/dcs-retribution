@@ -8,9 +8,3 @@ aircraft: OH-58D(R) Kiowa Warrior
 livery_set:
   - US 1-6 A 161
   - US 1-6 A 340
-mission_types:
-  - BAI
-  - CAS
-  - DEAD
-  - Escort
-  - OCA/Aircraft

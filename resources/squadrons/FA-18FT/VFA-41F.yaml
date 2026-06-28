@@ -6,5 +6,3 @@ country: USA
 role: Tanker
 aircraft: F/A-18F Tanker
 livery: Stock Tanker F
-mission_types:
-  - Refueling

@@ -6,12 +6,3 @@ country: UK
 role: Fighter Bomber
 aircraft: MosquitoFBMkVI
 livery: RAF
-mission_types:
-  - CAS
-  - Strike
-  - Anti-ship
-  - OCA/Aircraft
-  - Intercept
-  - Fighter sweep
-  - BARCAP
-  - TARCAP

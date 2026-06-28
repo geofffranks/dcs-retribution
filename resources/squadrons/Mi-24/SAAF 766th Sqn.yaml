@@ -6,8 +6,3 @@ country: Syria
 role: Attack Helicopter
 aircraft: Mi-24V Hind-E
 livery: "standard"
-mission_types:
-  - CAS
-  - BAI
-  - Transport
-  - Air Assault

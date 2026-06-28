@@ -8,18 +8,5 @@ bases:
   carrier: true
   shore: true
 livery: USN VA-46 Clansmen
-mission_types:
-  - BAI
-  - BARCAP
-  - CAS
-  - DEAD
-  - Escort
-  - OCA/Aircraft
-  - OCA/Runway
-  - SEAD
-  - SEAD Escort
-  - Strike
-  - Fighter sweep
-  - TARCAP
 players:
   - Mad Max

@@ -6,9 +6,3 @@ country: USA
 role: Attack
 aircraft: AH-1W SuperCobra
 livery: USA Marines
-mission_types:
-  - Anti-ship
-  - BAI
-  - CAS
-  - DEAD
-  - OCA/Aircraft

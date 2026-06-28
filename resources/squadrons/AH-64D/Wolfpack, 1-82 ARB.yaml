@@ -6,7 +6,3 @@ country: USA
 role: Attack Helicopter
 aircraft: AH-64D Apache Longbow
 livery: Wolfpack 1-82 ARB
-mission_types:
-  - CAS
-  - BAI
-  - OCA/Aircraft

@@ -6,6 +6,3 @@ country: USA
 role: Strike Fighter
 aircraft: EA-18G Growler
 livery: "*VFA-31 NH206"
-mission_types:
-  - SEAD
-  - SEAD Escort

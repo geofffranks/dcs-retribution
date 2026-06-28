@@ -6,9 +6,3 @@ country: USA
 role: Light Attack
 aircraft: OV-10A Bronco
 livery: VAL-4 104
-mission_types:
-  - BAI
-  - CAS
-  - DEAD
-  - OCA/Aircraft
-  - Strike

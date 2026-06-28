@@ -6,14 +6,3 @@ country: France
 role: Multirole Fighter
 aircraft: Mirage-F1CT
 livery: EC 3 33 Lorraine
-mission_types:
-  - BARCAP
-  - Escort
-  - Intercept
-  - Fighter sweep
-  - TARCAP
-  - BAI
-  - CAS
-  - OCA/Aircraft
-  - OCA/Runway
-  - Strike

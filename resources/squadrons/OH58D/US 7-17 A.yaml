@@ -10,9 +10,3 @@ livery_set:
   - US 7-17 A 039 Lola
   - US 7-17 A 964 Marvin
   - US -17 A 604 Taz
-mission_types:
-  - BAI
-  - CAS
-  - DEAD
-  - Escort
-  - OCA/Aircraft

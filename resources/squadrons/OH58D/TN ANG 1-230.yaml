@@ -8,9 +8,3 @@ aircraft: OH-58D(R) Kiowa Warrior
 livery_set:
   - US Tennessee ANG 1-230 113
   - US Tennessee ANG 1-230 152
-mission_types:
-  - BAI
-  - CAS
-  - DEAD
-  - Escort
-  - OCA/Aircraft

@@ -6,11 +6,3 @@ country: Russia
 role: Air Superiority Fighter
 aircraft: MiG-21bis Fishbed-N
 livery: "VVS - 185th GvIAP"
-mission_types:
-  - BARCAP
-  - TARCAP
-  - CAS
-  - Strike  
-  - Escort
-  - Intercept
-  - Fighter sweep
