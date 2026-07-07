@@ -104,6 +104,29 @@ check("cluster-escorted-strike",
 check("cluster-empty", M.cluster_has_react(fake_item({})), false)
 check("cluster-nil",   M.cluster_has_react({}),            false)
 
+-- pattern_escape: Retribution IADS group names contain "(" / ")" / "-" that
+-- break Moose's pattern-based FilterPrefixes. Replicate Moose's matcher
+-- (string.find with its own "-" -> "%-" gsub applied to the prefix) and assert
+-- an escaped prefix matches the literal name while the raw prefix does not.
+local function moose_matches(name, prefix)
+    -- Mirror Moose SET_GROUP:FilterPrefixes (Moose.lua): string.find(name,
+    -- gsub(prefix, "-", "%-"), 1) — NOT plain, so prefix is a Lua pattern.
+    return string.find(name, (prefix:gsub("%-", "%%-")), 1) ~= nil
+end
+
+local paren_names = {
+    "0041 | LION (EWR)",
+    "0035 | ELEPHANT (Naval Two Ship)",
+    "0114 | LORIKEET (S-300)",
+    "0178 | OPOSSUM (Patriot)",
+}
+for _, name in ipairs(paren_names) do
+    -- raw (unescaped) prefix fails to match because "(" / ")" are pattern captures
+    check("raw-nomatch:" .. name, moose_matches(name, name), false)
+    -- escaped prefix matches the literal name -> sensor lands in the SET_GROUP
+    check("escaped-match:" .. name, moose_matches(name, M.pattern_escape(name)), true)
+end
+
 if failures == 0 then
     print("OK: all QRA filter assertions passed")
     os.exit(0)

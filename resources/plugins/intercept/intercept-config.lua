@@ -144,6 +144,14 @@ local function ends_with(str, suffix)
     return str:sub(-#suffix) == suffix
 end
 
+-- Escape Lua pattern magic characters so a literal string can be used where
+-- Moose treats it as a pattern (SET_GROUP:FilterPrefixes matches via string.find
+-- with pattern semantics). We escape everything EXCEPT "-": Moose's FilterPrefixes
+-- already gsubs "-" -> "%-" itself, so escaping it here would double-escape.
+local function lua_pattern_escape(s)
+    return (s:gsub("[%(%)%.%%%+%*%?%[%]%^%$]", "%%%1"))
+end
+
 -- True if the group name's task-type suffix is a react-type. We require the
 -- namegen "{target} {flight_type}|..." format and match the first "|"-field:
 -- a name with no "|" is not a Retribution ATO flight, so we cannot classify it
@@ -238,9 +246,20 @@ local function build_dispatcher(coalition_name, records)
             return
         end
 
+        -- Moose SET_GROUP:FilterPrefixes matches names with Lua-pattern semantics
+        -- (string.find, only "-" pre-escaped). Retribution IADS group names contain
+        -- "(" / ")" (e.g. "0041 | LION (EWR)", "0114 | LORIKEET (S-300)"), which
+        -- would be read as pattern captures and never match, leaving the detection
+        -- set empty (no QRA scramble ever). Escape the magic chars so each prefix
+        -- matches its literal group name.
+        local detection_patterns = {}
+        for i, name in ipairs(detection_prefixes) do
+            detection_patterns[i] = lua_pattern_escape(name)
+        end
+
         local det_set = SET_GROUP:New()
             :FilterCoalitions(string.lower(coalition_name))
-            :FilterPrefixes(detection_prefixes)
+            :FilterPrefixes(detection_patterns)
             :FilterStart()
 
         local detection = DETECTION_AREAS:New(det_set, DETECTION_GROUPING_M)
@@ -383,4 +402,5 @@ end
 return {
     group_reacts = qra_group_reacts,
     cluster_has_react = qra_cluster_has_react,
+    pattern_escape = lua_pattern_escape,
 }
