@@ -107,22 +107,30 @@ def test_repropagate_no_op_when_old_equals_new() -> None:
 
 def test_untasked_grows_when_reserve_freed() -> None:
     # Reserve 4 -> 0 mid-turn releases the 4 benched jets into the plannable pool.
-    assert untasked_after_reserve_change(4, 0, 6) == 10
+    # owned 10: 6 untasked + 4 reserve.
+    assert untasked_after_reserve_change(4, 0, 6, 10) == 10
 
 
 def test_untasked_shrinks_when_reserve_raised() -> None:
-    # Reserve 0 -> 4 benches 4 jets that were plannable.
-    assert untasked_after_reserve_change(0, 4, 10) == 6
+    # Reserve 0 -> 4 benches 4 jets that were plannable. owned 10.
+    assert untasked_after_reserve_change(0, 4, 10, 10) == 6
 
 
 def test_untasked_unchanged_when_reserve_unchanged() -> None:
-    assert untasked_after_reserve_change(3, 3, 5) == 5
+    assert untasked_after_reserve_change(3, 3, 5, 8) == 5
 
 
 def test_untasked_floors_at_zero_when_reserve_exceeds_pool() -> None:
     # Only still-untasked jets can be benched; already-tasked flights are never
-    # retroactively un-planned, so the pool floors at 0.
-    assert untasked_after_reserve_change(0, 5, 2) == 0
+    # retroactively un-planned, so the pool floors at 0. owned 10, 8 tasked.
+    assert untasked_after_reserve_change(0, 5, 2, 10) == 0
+
+
+def test_untasked_capped_at_owned_after_attrition() -> None:
+    # Attrition left owned 2 below reserve 4; return_all floored untasked to 0.
+    # Lowering reserve to 1 must free only the 1 jet that exists beyond the new
+    # reserve (max 2-1), NOT the delta of 3.
+    assert untasked_after_reserve_change(4, 1, 0, 2) == 1
 
 
 def test_max_reserve_capped_by_unplanned_airframes() -> None:

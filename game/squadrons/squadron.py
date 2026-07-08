@@ -294,7 +294,7 @@ class Squadron:
         flights.
         """
         self.untasked_aircraft = untasked_after_reserve_change(
-            self.intercept_reserve, value, self.untasked_aircraft
+            self.intercept_reserve, value, self.untasked_aircraft, self.owned_aircraft
         )
         self.intercept_reserve = value
 

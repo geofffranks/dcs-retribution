@@ -13,9 +13,17 @@ class _FakeSquadron:
         self.intercept_reserve = reserve
         self.max_size = max_size
         self._barcap = barcap
+        # Attributes read by the real Squadron.set_intercept_reserve, which
+        # repropagate_qra_reserve now routes through.
+        self.owned_aircraft = max_size
+        self.untasked_aircraft = max(0, max_size - reserve)
 
     def capable_of(self, task: FlightType) -> bool:
         return self._barcap
+
+    def set_intercept_reserve(self, value: int) -> None:
+        # Exercise the real model logic (delta-adjust untasked + set reserve).
+        Squadron.set_intercept_reserve(cast(Squadron, self), value)
 
 
 def _airwing(squadrons: list[_FakeSquadron]) -> AirWing:
