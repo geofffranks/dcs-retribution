@@ -31,6 +31,22 @@ def qra_resource_count(
     return count
 
 
+def untasked_after_reserve_change(
+    old_reserve: int, new_reserve: int, untasked_aircraft: int
+) -> int:
+    """Plannable-aircraft count after a mid-turn QRA reserve edit.
+
+    ``untasked_aircraft`` is only recomputed from ``owned - reserve`` at
+    ``return_all_pilots_and_aircraft`` (turn init). Editing the reserve spinner
+    between turns must reflect in the plannable pool immediately, but a full
+    reset would return airframes already tasked to flights this turn. Adjust by
+    the reserve delta instead: freeing reserve (``old > new``) releases jets into
+    the pool; raising it benches only jets that are still untasked. Floored at 0 —
+    already-tasked flights are never retroactively un-planned.
+    """
+    return max(0, untasked_aircraft + (old_reserve - new_reserve))
+
+
 def seeded_intercept_reserve(
     capable_of_barcap: bool,
     current_reserve: int,

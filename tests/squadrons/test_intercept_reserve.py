@@ -5,6 +5,7 @@ from game.squadrons.intercept_reserve import (
     qra_resource_count,
     repropagated_intercept_reserve,
     seeded_intercept_reserve,
+    untasked_after_reserve_change,
 )
 
 
@@ -101,3 +102,23 @@ def test_repropagate_new_value_is_clamped_to_max_size() -> None:
 
 def test_repropagate_no_op_when_old_equals_new() -> None:
     assert repropagated_intercept_reserve(True, 2, 2, 2, 12) == 2
+
+
+def test_untasked_grows_when_reserve_freed() -> None:
+    # Reserve 4 -> 0 mid-turn releases the 4 benched jets into the plannable pool.
+    assert untasked_after_reserve_change(4, 0, 6) == 10
+
+
+def test_untasked_shrinks_when_reserve_raised() -> None:
+    # Reserve 0 -> 4 benches 4 jets that were plannable.
+    assert untasked_after_reserve_change(0, 4, 10) == 6
+
+
+def test_untasked_unchanged_when_reserve_unchanged() -> None:
+    assert untasked_after_reserve_change(3, 3, 5) == 5
+
+
+def test_untasked_floors_at_zero_when_reserve_exceeds_pool() -> None:
+    # Only still-untasked jets can be benched; already-tasked flights are never
+    # retroactively un-planned, so the pool floors at 0.
+    assert untasked_after_reserve_change(0, 5, 2) == 0

@@ -46,3 +46,25 @@ def test_reset_benches_reserve_regardless_of_plugin_flag() -> None:
     squadron = _bare_squadron(owned=10, reserve=4, intercept_enabled=False)
     squadron.return_all_pilots_and_aircraft()
     assert squadron.untasked_aircraft == 6
+
+
+def test_set_intercept_reserve_releases_jets_into_pool_immediately() -> None:
+    # Editing the reserve mid-turn must update the plannable pool at once, without
+    # a full return_all_pilots_and_aircraft() (which would return tasked flights).
+    squadron = _bare_squadron(owned=10, reserve=4)
+    squadron.return_all_pilots_and_aircraft()
+    assert squadron.untasked_aircraft == 6
+
+    squadron.set_intercept_reserve(0)
+    assert squadron.intercept_reserve == 0
+    assert squadron.untasked_aircraft == 10
+
+
+def test_set_intercept_reserve_benches_jets_immediately() -> None:
+    squadron = _bare_squadron(owned=10, reserve=0)
+    squadron.return_all_pilots_and_aircraft()
+    assert squadron.untasked_aircraft == 10
+
+    squadron.set_intercept_reserve(4)
+    assert squadron.intercept_reserve == 4
+    assert squadron.untasked_aircraft == 6

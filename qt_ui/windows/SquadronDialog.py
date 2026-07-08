@@ -408,7 +408,10 @@ class SquadronDialog(QDialog):
         return self.squadron_model.squadron
 
     def on_qra_reserve_changed(self, value: int) -> None:
-        self.squadron.intercept_reserve = value
+        # set_intercept_reserve also updates untasked_aircraft so the freed (or
+        # newly reserved) jets are immediately available to the planner this turn,
+        # rather than only after the next turn's return_all_pilots_and_aircraft.
+        self.squadron.set_intercept_reserve(value)
 
     def _aircraft_stats_text(self) -> str:
         s = self.squadron
