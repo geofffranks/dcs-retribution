@@ -31,6 +31,22 @@ def qra_resource_count(
     return count
 
 
+def max_intercept_reserve(
+    untasked_aircraft: int, intercept_reserve: int, max_size: int
+) -> int:
+    """Highest QRA reserve settable given aircraft already tasked this turn.
+
+    Aircraft tasked to flights cannot be pulled onto QRA, so the reserve can only
+    rise to the unplanned airframes plus what is already reserved:
+    ``untasked_aircraft + intercept_reserve`` equals ``owned - tasked`` by the turn
+    invariant (``tasked + untasked + reserve == owned``). This sum is stable under
+    ``untasked_after_reserve_change`` (which trades untasked for reserve), so it is
+    a fixed ceiling while the reserve spinner is edited. Also bounded by
+    ``max_size``.
+    """
+    return min(max_size, untasked_aircraft + intercept_reserve)
+
+
 def untasked_after_reserve_change(
     old_reserve: int, new_reserve: int, untasked_aircraft: int
 ) -> int:
