@@ -2,9 +2,10 @@
 --
 -- Standalone unit test for the task-type reaction filter in
 -- resources/plugins/intercept/intercept-config.lua. QRA must react only to
--- air-to-ground taskings (Strike/BAI/OCA-Runway/OCA-Aircraft/Anti-ship/DEAD)
--- and ignore
--- CAP/sweep/escort/intercept/SEAD/CAS/support, based on the DCS group name.
+-- air-to-ground taskings (Strike/BAI/OCA-Runway/OCA-Aircraft/Anti-ship/Armed
+-- Recon) and ignore
+-- CAP/sweep/escort/intercept/SEAD/CAS/DEAD/Air Assault/support, based on the
+-- DCS group name.
 --
 -- Not run by CI (CI has no Lua). Run locally with:
 --   lua    tests/missiongenerator/qra_filter_test.lua
@@ -42,9 +43,7 @@ check("BAI",          M.group_reacts("COLT BAI|5|3|0|"),            true)
 check("OCA/Runway",   M.group_reacts("HAWK OCA/Runway|5|1|0|"),     true)
 check("OCA/Aircraft", M.group_reacts("HAWK OCA/Aircraft|5|1|0|"),   true)
 check("Anti-ship",    M.group_reacts("VIPER Anti-ship|5|2|0|"),     true)
-check("DEAD",         M.group_reacts("WEASEL DEAD|5|4|0|"),         true)
 check("Armed Recon",  M.group_reacts("SCOUT Armed Recon|5|5|0|"),   true)
-check("Air Assault",  M.group_reacts("HERC Air Assault|5|6|0|"),    true)
 -- custom-named flight: naming.py appends the task type, so it still classifies
 check("custom-name-strike", M.group_reacts("Alpha Strike|5|8|0|"),  true)
 
@@ -57,6 +56,8 @@ check("Fighter sweep", M.group_reacts("EAGLE Fighter sweep|5|9|0|"), false)
 check("Escort",        M.group_reacts("EAGLE Escort|5|9|0|"),        false)
 check("Intercept",     M.group_reacts("Intercept|Tiyas|sq-abc|"),    false)
 check("AEW&C",         M.group_reacts("SENTRY AEW&C|5|1|0|"),        false)
+check("DEAD",          M.group_reacts("WEASEL DEAD|5|4|0|"),         false)
+check("Air Assault",   M.group_reacts("HERC Air Assault|5|6|0|"),    false)
 
 -- group_reacts: multi-word target name still parses the type suffix
 check("multiword-strike", M.group_reacts("Al Dhafra Strike|5|8|0|"), true)

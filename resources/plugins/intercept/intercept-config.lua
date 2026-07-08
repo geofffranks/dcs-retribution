@@ -126,7 +126,8 @@ end
 -- task type is embedded in its DCS group name by namegen.next_aircraft_name as
 -- "{target} {flight_type}|{country}|{n}|{variant}|" (game/naming.py). We react
 -- only when a detected cluster contains a group whose type is in QRA_REACT_TASKS;
--- CAP/sweep/escort/intercept/SEAD/CAS/support are ignored. Non-ATO enemy air
+-- CAP/sweep/escort/intercept/SEAD/CAS/DEAD/Air Assault/support are ignored.
+-- Non-ATO enemy air
 -- (not named by namegen) has no matching suffix and is never reacted to.
 -- ---------------------------------------------------------------------------
 local QRA_REACT_TASKS = {
@@ -135,9 +136,7 @@ local QRA_REACT_TASKS = {
     ["OCA/Runway"] = true,
     ["OCA/Aircraft"] = true,
     ["Anti-ship"] = true,
-    ["DEAD"] = true,
     ["Armed Recon"] = true,
-    ["Air Assault"] = true,
 }
 
 local function ends_with(str, suffix)
