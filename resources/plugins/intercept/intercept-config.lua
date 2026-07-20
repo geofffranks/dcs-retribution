@@ -296,6 +296,13 @@ local function build_dispatcher(coalition_name, records)
         dispatcher:SetEngageRadius(engagement_range_nm * NM)
         dispatcher:SetTacticalDisplay(false)  -- debug F10 overview; off in normal play
         dispatcher:SetGciRadius(scramble_radius_nm * NM)
+        -- Moose's default DisengageRadius is 300 km (~162 NM): once a defender's
+        -- DistanceFromHomeBase exceeds it, Moose aborts the intercept mid-transit.
+        -- Our GCI radius is configurable up to 400 NM, so leaving the default would
+        -- launch a far-edge defender only to have it turn straight around. Size the
+        -- disengage radius to the furthest reachable point (scramble trigger + engage
+        -- chase) plus a maneuver margin so a valid intercept never self-aborts.
+        dispatcher:SetDisengageRadius((scramble_radius_nm + engagement_range_nm + 20) * NM)
         if comms_enabled then
             dispatcher:SetSendMessages(true)
         end
