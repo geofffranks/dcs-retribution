@@ -326,7 +326,12 @@ local function build_dispatcher(coalition_name, records)
                     dispatcher:SetSquadronTakeoffInAirAltitude(sq, elev + 760)
                 end
             end
-            dispatcher:SetSquadronGrouping(sq, 2)
+            -- 75% single / 25% pair per scramble. QRA alert launches are mostly
+            -- singles; a fixed group of 2 means a reserve of 4 answers only 2 raids,
+            -- while mostly-singles lets the same reserve answer ~4. Rolled once per
+            -- squadron (record) so each base's launches are independent.
+            local grouping = (math.random() < 0.75) and 1 or 2
+            dispatcher:SetSquadronGrouping(sq, grouping)
             -- NOTE: deliberately NOT SetSquadronVisible — see header. Visible mode
             -- forces a cold pre-park (F-16 never taxis), clamps reserve to parking
             -- spots, and forces Grouping=1. Non-visible = in-air fresh-spawn on scramble.

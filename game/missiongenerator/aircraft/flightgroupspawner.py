@@ -150,7 +150,9 @@ class FlightGroupSpawner:
         the dispatcher then fresh-spawns live intercept flights from it in-air on
         scramble (SetDefaultTakeoffInAir — see intercept-config.lua for why every
         ground spawn was abandoned). The caller builds a Flight with count=2 (the
-        standard Moose dispatcher grouping) before constructing this spawner.
+        max dispatcher grouping; Moose spawns 1 or 2 per scramble via
+        InitGrouping, set per squadron in intercept-config.lua) before building
+        this spawner.
 
         Returns None when the squadron is not based at an Airfield (e.g. FOBs
         are not supported by the QRA system).
