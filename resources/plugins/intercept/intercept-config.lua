@@ -314,6 +314,18 @@ local function build_dispatcher(coalition_name, records)
             local sq = rec.squadronName .. " #" .. string.sub(tostring(rec.squadronId), 1, 8)
             dispatcher:SetSquadron(sq, rec.airbaseName, { rec.templatePrefix }, tonumber(rec.resourceCount))
             dispatcher:SetSquadronGci(sq, 900, 1200)
+            -- Terrain-relative in-air spawn altitude (~2,500 ft AGL over this
+            -- squadron's field). The global SetDefaultTakeoffInAirAltitude above
+            -- is absolute MSL, so high-elevation fields spawn low and low fields
+            -- spawn high with free energy; per-squadron we offset by the field's
+            -- land height. Falls back to the global 2000 m when the lookup misses.
+            local base = AIRBASE:FindByName(rec.airbaseName)
+            if base then
+                local ok_e, elev = pcall(function() return base:GetCoordinate():GetLandHeight() end)
+                if ok_e and elev then
+                    dispatcher:SetSquadronTakeoffInAirAltitude(sq, elev + 760)
+                end
+            end
             dispatcher:SetSquadronGrouping(sq, 2)
             -- NOTE: deliberately NOT SetSquadronVisible — see header. Visible mode
             -- forces a cold pre-park (F-16 never taxis), clamps reserve to parking
