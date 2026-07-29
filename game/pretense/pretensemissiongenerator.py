@@ -16,6 +16,10 @@ from dcs.countries import (
 )
 from dcs.task import AFAC, FAC, SetInvisibleCommand, SetImmortalCommand, OrbitAction
 
+from game.missiongenerator.carrierstandoff import (
+    CarrierStandoffFinding,
+    log_carrier_standoff_warning,
+)
 from game.missiongenerator.convoygenerator import ConvoyGenerator
 from game.missiongenerator.environmentgenerator import EnvironmentGenerator
 from game.missiongenerator.forcedoptionsgenerator import ForcedOptionsGenerator
@@ -59,7 +63,11 @@ class PretenseMissionGenerator(MissionGenerator):
             options["difficulty"]["spectatorExternalViews"] = ext_view
             self.mission.options.load_from_dict(options)
 
-    def generate_miz(self, output: Path) -> UnitMap:
+    def generate_miz(
+        self,
+        output: Path,
+        confirmed_carrier_standoff_findings: list[CarrierStandoffFinding] | None = None,
+    ) -> UnitMap:
         game_backup_pickle = pickle.dumps(self.game)
         path = pre_pretense_backups_dir()
         path /= f".pre-pretense-backup.retribution"
@@ -75,7 +83,10 @@ class PretenseMissionGenerator(MissionGenerator):
                 "MissionSimulation."
             )
         self.generation_started = True
-
+        # A non-None value is the UI-confirmed sentinel, including an empty list;
+        # skip the duplicate preflight/log while preserving direct/headless None behavior.
+        if confirmed_carrier_standoff_findings is None:
+            log_carrier_standoff_warning(self.carrier_standoff_preflight())
         self.game.pretense_ground_supply = {1: {}, 2: {}}
         self.game.pretense_ground_assault = {1: {}, 2: {}}
         self.game.pretense_air = {1: {}, 2: {}}

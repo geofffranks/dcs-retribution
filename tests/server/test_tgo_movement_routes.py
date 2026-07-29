@@ -6,6 +6,7 @@ import pytest
 from dcs.mapping import Point
 from fastapi import HTTPException
 
+from game.server.controlpoints.routes import set_destination
 from game.server.leaflet import LeafletPoint
 from game.server.tgos.models import TgoJs
 from game.server.tgos.routes import (
@@ -35,16 +36,31 @@ def _ship(blue: bool = True) -> ShipGroundObject:
 
 
 def _game(
-    tgo: Any, *, sea: bool = True, land_between: bool = False, landmap: bool = True
+    tgo: Any,
+    *,
+    sea: bool = True,
+    land_between: bool = False,
+    landmap: bool = True,
+    shore_distance: float = 100000.0,
+    carrier_standoff: int = 0,
 ) -> Any:
     landmap_obj = (
-        SimpleNamespace(land_inbetween=lambda a, b: land_between) if landmap else None
+        SimpleNamespace(
+            land_inbetween=lambda a, b: land_between,
+            distance_to_land=lambda point: shore_distance,
+        )
+        if landmap
+        else None
     )
+    settings = SimpleNamespace(carrier_min_standoff_distance=carrier_standoff)
+    game = SimpleNamespace(settings=settings)
+    tgo.control_point._coalition.game = game
     theater = SimpleNamespace(
         terrain=None,
         landmap=landmap_obj,
         is_in_sea=lambda p: sea,
     )
+    tgo.control_point.theater = theater
     db = SimpleNamespace(tgos=SimpleNamespace(get=lambda _id: tgo))
     return SimpleNamespace(theater=theater, db=db)
 
@@ -103,6 +119,41 @@ def _patch_point(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def _control_point_game(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    shore_distance: float = 100000.0,
+    land_between: bool = False,
+    carrier_standoff: int = 0,
+) -> Any:
+    ship = _ship(blue=True)
+    cp = ship.control_point
+    monkeypatch.setattr(type(cp), "is_carrier", property(lambda self: True))
+    monkeypatch.setattr(type(cp), "is_fleet", property(lambda self: True))
+    monkeypatch.setattr(
+        type(cp), "max_move_distance", property(lambda self: nautical_miles(80))
+    )
+    landmap = SimpleNamespace(
+        land_inbetween=lambda a, b: land_between,
+        distance_to_land=lambda point: shore_distance,
+    )
+    game = SimpleNamespace(
+        settings=SimpleNamespace(carrier_min_standoff_distance=carrier_standoff),
+        theater=SimpleNamespace(
+            terrain=None,
+            landmap=landmap,
+            find_control_point_by_id=lambda _id: cp,
+        ),
+    )
+    cp.theater = game.theater
+    cp._coalition.game = game
+    monkeypatch.setattr(
+        "game.server.controlpoints.routes.Point.from_latlng",
+        staticmethod(lambda latlng, terrain: Point(latlng.lat, latlng.lng, None)),  # type: ignore[arg-type]
+    )
+    return game
+
+
 def test_set_destination_rejects_non_ship(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_point(monkeypatch)
     location = PresetLocation(
@@ -130,20 +181,39 @@ def test_set_destination_rejects_red(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_set_destination_rejects_out_of_range(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_point(monkeypatch)
     ship = _ship(blue=True)
+    monkeypatch.setattr(
+        type(ship.control_point), "is_carrier", property(lambda self: True)
+    )
     far = nautical_miles(80).meters + 5000.0
     with pytest.raises(HTTPException) as exc:
-        set_tgo_destination(uuid4(), LeafletPoint(lat=far, lng=0), _game(ship))
+        set_tgo_destination(
+            uuid4(),
+            LeafletPoint(lat=far, lng=0),
+            _game(ship, shore_distance=nautical_miles(20).meters, carrier_standoff=60),
+        )
     assert exc.value.status_code == 400
+    assert exc.value.detail == "Cannot move Ship more than 80.0nm."
 
 
 def test_set_destination_rejects_land(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_point(monkeypatch)
     ship = _ship(blue=True)
+    monkeypatch.setattr(
+        type(ship.control_point), "is_carrier", property(lambda self: True)
+    )
     with pytest.raises(HTTPException) as exc:
         set_tgo_destination(
-            uuid4(), LeafletPoint(lat=1000, lng=0), _game(ship, land_between=True)
+            uuid4(),
+            LeafletPoint(lat=10, lng=0),
+            _game(
+                ship,
+                land_between=True,
+                shore_distance=nautical_miles(20).meters,
+                carrier_standoff=60,
+            ),
         )
     assert exc.value.status_code == 400
+    assert exc.value.detail == "Cannot move Ship over land or out of the sea."
 
 
 def test_set_destination_accepts_open_water(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -156,6 +226,25 @@ def test_set_destination_accepts_open_water(monkeypatch: pytest.MonkeyPatch) -> 
     assert ship.target_position.y == 0
 
 
+def test_carrier_destination_rejects_insufficient_shore_standoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_point(monkeypatch)
+    ship = _ship(blue=True)
+    monkeypatch.setattr(
+        type(ship.control_point), "is_carrier", property(lambda self: True)
+    )
+    with pytest.raises(HTTPException) as exc:
+        set_tgo_destination(
+            uuid4(),
+            LeafletPoint(lat=10, lng=0),
+            _game(ship, shore_distance=nautical_miles(20).meters, carrier_standoff=60),
+        )
+    assert exc.value.status_code == 400
+    assert "60" in str(exc.value.detail)
+    assert "shore" in str(exc.value.detail).lower()
+
+
 def test_set_destination_rejects_not_in_sea(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_point(monkeypatch)
     ship = _ship(blue=True)
@@ -164,6 +253,44 @@ def test_set_destination_rejects_not_in_sea(monkeypatch: pytest.MonkeyPatch) -> 
             uuid4(), LeafletPoint(lat=1000, lng=0), _game(ship, sea=False)
         )
     assert exc.value.status_code == 400
+
+
+def test_control_point_destination_preserves_validation_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    game = _control_point_game(
+        monkeypatch,
+        shore_distance=nautical_miles(20).meters,
+        carrier_standoff=60,
+    )
+    with pytest.raises(HTTPException) as exc:
+        set_destination(
+            uuid4(), LeafletPoint(lat=nautical_miles(80).meters + 5000, lng=0), game
+        )
+    assert exc.value.detail == "Cannot move cp more than 80.0nm."
+
+    game = _control_point_game(
+        monkeypatch,
+        shore_distance=nautical_miles(20).meters,
+        land_between=True,
+        carrier_standoff=60,
+    )
+    with pytest.raises(HTTPException) as exc:
+        set_destination(uuid4(), LeafletPoint(lat=10, lng=0), game)
+    assert exc.value.detail == "Cannot move cp over land."
+
+
+def test_control_point_destination_rejects_unsafe_in_range_carrier(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    game = _control_point_game(
+        monkeypatch,
+        shore_distance=nautical_miles(20).meters,
+        carrier_standoff=60,
+    )
+    with pytest.raises(HTTPException) as exc:
+        set_destination(uuid4(), LeafletPoint(lat=10, lng=0), game)
+    assert "configured carrier shore distance" in str(exc.value.detail)
 
 
 def test_set_destination_allows_when_no_landmap(

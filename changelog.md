@@ -1,6 +1,7 @@
 # Retribution v1.6.0
 
 ## Features/Improvements
+* **[Mission Generator]** Keep carriers and LHAs clear of the shore during movement and mission generation, with configurable standoff warnings.
 * **[UX]** Add per-tanker orbit-speed controls with Auto and bounded manual KIAS modes.
 * **[Mission Generation]** Carriers now steer for approximately 25 kt of wind over the angled landing deck with near-zero crosswind; ship definitions support a `landing_deck_angle` offset.
 * **[Kneeboard]** Use a light-grey daytime kneeboard background instead of near-white, to avoid glare under HDR / Auto-HDR while staying readable in daylight.

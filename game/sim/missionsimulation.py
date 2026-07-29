@@ -8,6 +8,7 @@ from typing import Optional, TYPE_CHECKING
 
 from game.debriefing import Debriefing
 from game.missiongenerator import MissionGenerator
+from game.missiongenerator.carrierstandoff import CarrierStandoffFinding
 from game.settings.settings import FastForwardStopCondition, CombatResolutionMethod
 from game.unitmap import UnitMap
 from .aircraftsimulation import AircraftSimulation
@@ -76,9 +77,15 @@ class MissionSimulation:
         self.completed = events.simulation_complete
         return events
 
-    def generate_miz(self, output: Path) -> None:
+    def generate_miz(
+        self,
+        output: Path,
+        confirmed_carrier_standoff_findings: list[CarrierStandoffFinding] | None = None,
+    ) -> None:
         with logged_duration("Mission generation"):
-            self.unit_map = MissionGenerator(self.game, self.time).generate_miz(output)
+            self.unit_map = MissionGenerator(self.game, self.time).generate_miz(
+                output, confirmed_carrier_standoff_findings
+            )
         self.miz_generated_at = time.time()
 
     def debrief_current_state(
