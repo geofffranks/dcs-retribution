@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import logging
 from collections import defaultdict
+from numbers import Real
 from dataclasses import dataclass
 from functools import cache, cached_property
 from pathlib import Path
@@ -16,6 +17,10 @@ from dcs.unittype import FlyingType
 from dcs.weapons_data import weapon_ids
 
 from game.ato import FlightType
+from game.ato.flightplans.tankerorbitspeed import (
+    MAX_TANKER_ORBIT_SPEED_KIAS,
+    MIN_TANKER_ORBIT_SPEED_KIAS,
+)
 from game.data.units import UnitClass
 from game.dcs.aircraftproperties import PropertyDateGate
 from game.dcs.lasercodeconfig import LaserCodeConfig
@@ -254,6 +259,16 @@ class AircraftType(UnitType[Type[FlyingType]]):
     #: ``date_gated_properties`` block. Empty (gates nothing) for the many airframes
     #: that declare no block.
     property_date_gate: PropertyDateGate = PropertyDateGate()
+
+    #: Optional known-safe AAR (air-to-air refueling) receiver speed, in KIAS,
+    #: for this aircraft acting as a *receiver*. Populated from the
+    #: ``aar_receiver_speed_kias`` key in the aircraft's data file. Used by the
+    #: shared tanker orbit-speed selection policy
+    #: (``game.ato.flightplans.tankerorbitspeed``) to pick the slowest known
+    #: receiver speed in Auto mode. ``None`` when the aircraft declares no such
+    #: data. Invalid values are rejected while loading aircraft data and are
+    #: defensively ignored again by the selection policy.
+    aar_receiver_speed: Optional[Speed] = None
 
     _by_name: ClassVar[dict[str, AircraftType]] = {}
     _by_unit_type: ClassVar[dict[type[FlyingType], list[AircraftType]]] = defaultdict(
@@ -580,6 +595,21 @@ class AircraftType(UnitType[Type[FlyingType]]):
         cls._custom_weapon_injections(aircraft, data)
         cls._user_weapon_injections(aircraft)
 
+        aar_receiver_speed_kias = data.get("aar_receiver_speed_kias")
+        if isinstance(aar_receiver_speed_kias, Real):
+            aar_receiver_speed_kias_float = float(aar_receiver_speed_kias)
+        else:
+            aar_receiver_speed_kias_float = None
+        if (
+            aar_receiver_speed_kias_float is not None
+            and MIN_TANKER_ORBIT_SPEED_KIAS
+            <= aar_receiver_speed_kias_float
+            <= MAX_TANKER_ORBIT_SPEED_KIAS
+        ):
+            aar_receiver_speed = knots(aar_receiver_speed_kias_float)
+        else:
+            aar_receiver_speed = None
+
         display_name = data.get("display_name", variant_id)
         return AircraftType(
             dcs_unit_type=aircraft,
@@ -601,6 +631,7 @@ class AircraftType(UnitType[Type[FlyingType]]):
             max_group_size=data.get("max_group_size", aircraft.group_size_max),
             patrol_altitude=patrol_config.altitude,
             patrol_speed=patrol_config.speed,
+            aar_receiver_speed=aar_receiver_speed,
             cruise_altitude=altitudes_config.cruise,
             combat_altitude=altitudes_config.combat,
             max_mission_range=mission_range,

@@ -44,8 +44,9 @@ from game.ato.flightplans.formationattack import FormationAttackLayout
 from game.ato.flightplans.packagerefueling import PackageRefuelingFlightPlan
 from game.ato.flightplans.shiprecoverytanker import RecoveryTankerFlightPlan
 from game.ato.flightplans.theaterrefueling import TheaterRefuelingFlightPlan
+from game.ato.flightplans.tankerorbitspeed import select_tanker_orbit_speed
 from game.missiongenerator.missiondata import MissionData
-from game.utils import nautical_miles, knots, feet
+from game.utils import Speed, nautical_miles, knots, feet
 
 
 class AircraftBehavior:
@@ -373,7 +374,7 @@ class AircraftBehavior:
         self.configure_tanker_tacan(flight, group)
 
         clouds = flight.squadron.coalition.game.conditions.weather.clouds
-        speed = knots(250).meters_per_second
+        speed = self.tanker_orbit_speed(flight).meters_per_second
         altitude = feet(6000).meters
         if clouds is not None:
             if abs(clouds.base - altitude) < feet(1000).meters:
@@ -404,6 +405,10 @@ class AircraftBehavior:
         recovery.stop_if_lua_predicate(lua_predicate)
         recovery.stop_after_duration(int(tanker_tos.total_seconds()) + 1)
         group.points[0].add_task(recovery)
+
+    @staticmethod
+    def tanker_orbit_speed(flight: Flight) -> Speed:
+        return select_tanker_orbit_speed(flight.props, [], knots(250))
 
     def configure_tanker_tacan(self, flight: Flight, group: FlyingGroup[Any]) -> None:
         tanker_info = self.mission_data.tankers[-1]

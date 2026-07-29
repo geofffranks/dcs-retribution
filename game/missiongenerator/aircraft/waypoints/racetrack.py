@@ -1,4 +1,5 @@
 import logging
+from typing import Any, cast
 
 from dcs.point import MovingPoint
 from dcs.task import (
@@ -13,6 +14,8 @@ from dcs.task import (
 
 from game.ato import FlightType
 from game.ato.flightplans.patrolling import PatrollingFlightPlan
+from game.ato.flightplans.tankerorbitspeed import select_tanker_orbit_speed
+from game.utils import Speed
 from ._helper import create_stop_orbit_trigger
 from .pydcswaypointbuilder import PydcsWaypointBuilder
 
@@ -74,7 +77,11 @@ class RaceTrackBuilder(PydcsWaypointBuilder):
         orbit = OrbitAction(
             altitude=waypoint.alt,
             pattern=OrbitAction.OrbitPattern.RaceTrack,
-            speed=int(flight_plan.patrol_speed.kph),
+            speed=(
+                int(self.tanker_orbit_speed().kph)
+                if self.flight.flight_type is FlightType.REFUELING
+                else int(flight_plan.patrol_speed.kph)
+            ),
         )
 
         racetrack = ControlledTask(orbit)
@@ -85,6 +92,18 @@ class RaceTrackBuilder(PydcsWaypointBuilder):
         create_stop_orbit_trigger(racetrack, self.package, self.mission, elapsed)
         # end of hotfix
         waypoint.add_task(racetrack)
+
+    def tanker_orbit_speed(self) -> Speed:
+        receiver_speeds = [
+            flight.unit_type.aar_receiver_speed
+            for flight in self.flight.package.flights
+            if flight is not self.flight
+        ]
+        return select_tanker_orbit_speed(
+            self.flight.props,
+            receiver_speeds,
+            cast(PatrollingFlightPlan[Any], self.flight.flight_plan).patrol_speed,
+        )
 
     def configure_refueling_actions(self, waypoint: MovingPoint) -> None:
         waypoint.add_task(Tanker())
