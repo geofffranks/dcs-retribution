@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import MagicMock
@@ -115,6 +116,7 @@ def test_loss_counts_blue_side() -> None:
         airlift_cargo=2,
         ground_objects=5,
         scenery=0,
+        bases_captured=2,
         bases_lost=1,  # one base captured by RED == one base Blue lost
         runways_destroyed=1,
     )
@@ -131,6 +133,7 @@ def test_loss_counts_red_side() -> None:
         airlift_cargo=4,  # 1 + 3
         ground_objects=2,
         scenery=1,
+        bases_captured=1,
         bases_lost=2,  # two bases captured by BLUE == two bases Red lost
         runways_destroyed=2,
     )
@@ -156,6 +159,7 @@ def test_loss_counts_partition_matches_combined_totals() -> None:
         list(debriefing.ground_object_losses)
     )
     assert blue.scenery + red.scenery == len(list(debriefing.scenery_object_losses))
+    assert blue.bases_captured + red.bases_captured == len(debriefing.base_captures)
     assert blue.bases_lost + red.bases_lost == len(debriefing.base_captures)
     assert blue.runways_destroyed + red.runways_destroyed == len(
         list(debriefing.damaged_runways)
@@ -213,3 +217,16 @@ def test_state_data_intercept_survivors_tolerates_empty_lua_array() -> None:
     """An empty Lua table serializes to [] in JSON; from_json must not crash."""
     state = StateData.from_json({"intercept_survivors": []}, _minimal_unit_map())
     assert state.intercept_survivors == {}
+
+
+def test_mission_summary_uses_directional_base_capture_counts() -> None:
+    summary_path = (
+        Path(__file__).resolve().parents[1]
+        / "qt_ui/windows/QWaitingForMissionResultWindow.py"
+    )
+    summary_source = summary_path.read_text(encoding="utf-8")
+
+    assert (
+        '("Bases captured", blue.bases_captured, red.bases_captured)' in summary_source
+    )
+    assert '("Bases lost", blue.bases_lost, red.bases_lost)' not in summary_source
