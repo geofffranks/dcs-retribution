@@ -50,6 +50,7 @@ def test_generate_flight_kneeboard_calls_generate_recon_pages() -> None:
         gen.tankers = []
         gen.jtacs = []
         gen.flights = []
+        gen.atis_by_name = {}
         gen.generate_flight_kneeboard(flight, package_flights)
         mocked.assert_called_once()
         # Regression: dark_kneeboard must propagate so the recon-page
@@ -101,6 +102,7 @@ def test_generate_flight_kneeboard_passes_dark_mode_when_enabled() -> None:
         gen.tankers = []
         gen.jtacs = []
         gen.flights = []
+        gen.atis_by_name = {}
         gen.generate_flight_kneeboard(flight, package_flights)
         _, kwargs = mocked.call_args
         assert kwargs.get("dark") is True
@@ -147,5 +149,57 @@ def test_generate_flight_kneeboard_skips_recon_when_setting_off() -> None:
         gen.tankers = []
         gen.jtacs = []
         gen.flights = []
+        gen.atis_by_name = {}
         gen.generate_flight_kneeboard(flight, package_flights)
         mocked.assert_not_called()
+
+
+def test_generate_flight_kneeboard_passes_atis_by_name_to_recon() -> None:
+    from game.missiongenerator.kneeboard import KneeboardGenerator
+    from game.radio.radios import RadioFrequency
+
+    flight = MagicMock()
+    flight.client_units = [MagicMock()]
+    flight.aircraft_type = MagicMock()
+    flight.aircraft_type.utc_kneeboard = False
+    flight.package = MagicMock()
+    flight.package.target = MagicMock()
+    flight.friendly = MagicMock()
+    flight.waypoints = []
+    package_flights: list[Any] = []
+
+    game = MagicMock()
+    game.coalition_for.return_value.bullseye.position = MagicMock()
+    game.conditions.weather = MagicMock()
+    game.conditions.start_time = MagicMock()
+    game.settings = MagicMock()
+    game.settings.generate_target_recon_kneeboard = True
+    game.settings.target_recon_extra_threat_search_nmi = 0
+    game.notes = ""
+
+    atis_by_name = {"Kobuleti": RadioFrequency(131_000_000)}
+
+    with patch(
+        "game.missiongenerator.kneeboard.generate_recon_pages",
+        return_value=[],
+    ) as mocked, patch(
+        "game.missiongenerator.kneeboard.BriefingPage",
+        return_value=MagicMock(),
+    ), patch(
+        "game.missiongenerator.kneeboard.SupportPage",
+        return_value=MagicMock(),
+    ):
+        gen = KneeboardGenerator.__new__(KneeboardGenerator)
+        gen.mission = MagicMock()
+        gen.game = game
+        gen.dark_kneeboard = False
+        gen.comms = []
+        gen.awacs = []
+        gen.tankers = []
+        gen.jtacs = []
+        gen.flights = []
+        gen.atis_by_name = atis_by_name
+        gen.generate_flight_kneeboard(flight, package_flights)
+        mocked.assert_called_once()
+        _, kwargs = mocked.call_args
+        assert kwargs.get("atis_by_name") is atis_by_name

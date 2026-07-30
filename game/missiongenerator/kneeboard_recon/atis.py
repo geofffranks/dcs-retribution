@@ -65,6 +65,11 @@ class AtisBlock:
     # Plain-text caveat shown below the panel when the weather setup will
     # produce CB cells (e.g. precipitation=Thunderstorm). Empty otherwise.
     pressure_note: str
+    # MOOSE ATIS broadcast frequency for this field, already formatted (e.g.
+    # "VHF 131.000"). Empty when the ATIS plugin is disabled or no frequency
+    # is known for this airfield; an empty value suppresses the panel's MOOSE
+    # ATIS row so the default render is unchanged.
+    moose_atis_freq: str = ""
 
 
 def format_cloud_layer(clouds: Optional["Clouds"]) -> str:
@@ -188,6 +193,7 @@ def build_atis_block(
     atc_freq_str: str,
     tacan_str: str,
     field_elevation_m: Optional[float] = None,
+    moose_atis_freq_str: str = "",
 ) -> AtisBlock:
     qnh = weather.atmospheric.qnh
     # Show the temperature-corrected altimeter setting at the departure field (what
@@ -255,6 +261,7 @@ def build_atis_block(
         atc_freq=atc_freq_str,
         tacan=tacan_str,
         pressure_note=pressure_note,
+        moose_atis_freq=moose_atis_freq_str,
     )
 
 
@@ -267,7 +274,7 @@ def draw_atis_block(
     width: int,
     height: int,
 ) -> None:
-    """Render ATIS block in 5-row x 3-column layout inside given rect."""
+    """Render ATIS block (5 rows, or 6 with a MOOSE ATIS frequency) x 3 columns."""
     draw.rectangle((x, y, x + width, y + height), fill=_PANEL_BG)
     draw.line((x, y + height, x + width, y + height), fill=_FG, width=2)
 
@@ -305,6 +312,14 @@ def draw_atis_block(
             ("TACAN", block.tacan or "--"),
         ],
     ]
+    if block.moose_atis_freq:
+        rows.append(
+            [
+                ("MOOSE ATIS", block.moose_atis_freq),
+                ("", ""),
+                ("", ""),
+            ]
+        )
 
     label_font = load_font(11, bold=True)
     value_font = load_font(15, bold=True)

@@ -75,6 +75,7 @@ from game.theater.theatergroundobject import (
 if TYPE_CHECKING:
     from game import Game
     from game.missiongenerator.aircraft.flightdata import FlightData
+    from game.radio.radios import RadioFrequency
     from game.weather.weather import Weather
 
 
@@ -85,6 +86,11 @@ PAGE_W = 768
 PAGE_H = 1024
 TITLE_H = 56
 ATIS_H = 220
+# ATIS_H sizes the 5-row panel; an optional MOOSE ATIS frequency adds a 6th
+# row. draw_atis_block divides the panel height evenly across its rows, so
+# growing the panel by one base row height (220 // 5 = 44 px) keeps the rows
+# close to their normal spacing whether or not a pressure note is present.
+ATIS_H_WITH_MOOSE = ATIS_H + 44  # 264
 FOOTER_H = 36
 
 
@@ -493,12 +499,14 @@ class AirfieldDeparturePage(_RecordingPage):
         game: "Game",
         weather: "Weather",
         dark: bool = False,
+        atis_by_name: Optional[dict[str, "RadioFrequency"]] = None,
     ) -> None:
         super().__init__()
         self.flight = flight
         self.game = game
         self.weather = weather
         self.dark = dark
+        self.atis_by_name = atis_by_name or {}
         self._p = _palette(dark)
 
     def write(self, path: Path) -> None:
@@ -542,6 +550,11 @@ class AirfieldDeparturePage(_RecordingPage):
         else:
             start_zulu = None
         sunrise, sunset = self._sun_times(airport.position.latlng())
+        # _format_freq returns "" for None, so an unknown field (missing key)
+        # naturally yields an empty string — mirroring how the ATC frequency is
+        # formatted below.
+        moose_freq = self.atis_by_name.get(self.flight.departure.airfield_name)
+        moose_atis_freq_str = self._format_freq(moose_freq)
         block = build_atis_block(
             weather=self.weather,
             start_time_local=start_local,
@@ -553,13 +566,17 @@ class AirfieldDeparturePage(_RecordingPage):
             atc_freq_str=self._format_freq(self.flight.departure.atc),
             tacan_str=self._format_tacan(),
             field_elevation_m=_field_elevation_m(airport, self.game.theater.terrain),
+            moose_atis_freq_str=moose_atis_freq_str,
         )
         self._record(f"QNH {block.qnh_inhg:.2f}")
         self._record(f"QFE {block.qfe_display}")
         self._record(f"SUNRISE {block.sunrise or '--'}")
         self._record(f"SUNSET {block.sunset or '--'}")
-        draw_atis_block(draw, block, x=0, y=y, width=PAGE_W, height=ATIS_H)
-        y += ATIS_H
+        if block.moose_atis_freq:
+            self._record(f"MOOSE ATIS {block.moose_atis_freq}")
+        atis_h = ATIS_H_WITH_MOOSE if block.moose_atis_freq else ATIS_H
+        draw_atis_block(draw, block, x=0, y=y, width=PAGE_W, height=atis_h)
+        y += atis_h
 
         # Airfield map area (tile basemap; airfield diagram is the focus)
         map_box = (18, y + 18, PAGE_W - 18, PAGE_H - FOOTER_H - 24)
@@ -1957,6 +1974,7 @@ def generate_recon_pages(
     weather: "Weather",
     extra_threat_search_m: float,
     dark: bool = False,
+    atis_by_name: Optional[dict[str, "RadioFrequency"]] = None,
 ) -> List[KneeboardPage]:
     # Re-arm the once-per-pass WARNING log for tile-fetch failures so a new
     # generation pass surfaces the first failure even if the previous pass
@@ -1972,6 +1990,7 @@ def generate_recon_pages(
                 game=game,
                 weather=weather,
                 dark=dark,
+                atis_by_name=atis_by_name,
             )
         )
 
