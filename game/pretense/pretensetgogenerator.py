@@ -690,7 +690,8 @@ class PretenseGenericCarrierGenerator(GenericCarrierGenerator):
                 # There are multiple unsimulated hours between turns, so we can
                 # count those as the time the carrier uses to move and the mission
                 # time as the recovery window.
-                brc = self.steam_into_wind(ship_group)
+                deck_angle = getattr(ship_units[0].unit_type, "landing_deck_angle", 0.0)
+                brc = self.steam_into_wind(ship_group, deck_angle=deck_angle)
             else:
                 brc = Heading(0)
 

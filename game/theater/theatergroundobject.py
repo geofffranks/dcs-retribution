@@ -790,7 +790,13 @@ class ShipGroundObject(NavalGroundObject):
 
     def destination_in_range(self, destination: Point) -> bool:
         distance = meters(destination.distance_to_point(self.position))
-        return distance <= self.max_move_distance
+        return (
+            distance <= self.max_move_distance
+            and self.control_point.destination_within_carrier_standoff(destination)
+        )
+
+    def destination_within_carrier_standoff(self, destination: Point) -> bool:
+        return self.control_point.destination_within_carrier_standoff(destination)
 
 
 class IadsBuildingGroundObject(BuildingGroundObject):

@@ -954,6 +954,19 @@ class Settings:
 
     # Mission Generator
     # Gameplay
+    carrier_min_standoff_distance: int = bounded_int_option(
+        "Carrier minimum shore distance (NM)",
+        MISSION_GENERATOR_PAGE,
+        GAMEPLAY_SECTION,
+        default=60,
+        min=0,
+        max=80,
+        detail=(
+            "Minimum distance in nautical miles between carriers and the shore while "
+            "steaming into wind; carriers closer than this may run out of sea room. "
+            "0 disables the check."
+        ),
+    )
     fast_forward_stop_condition: FastForwardStopCondition = choices_option(
         "Fast forward until",
         page=MISSION_GENERATOR_PAGE,

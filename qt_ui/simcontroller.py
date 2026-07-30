@@ -5,6 +5,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
+
+from game.missiongenerator.carrierstandoff import CarrierStandoffFinding
 from typing import Callable, Optional, TYPE_CHECKING
 
 from PySide6.QtCore import QObject, Signal
@@ -86,8 +88,14 @@ class SimController(QObject):
     def run_to_first_contact(self) -> None:
         self.game_loop.run_to_first_contact()
 
-    def generate_miz(self, output: Path) -> None:
-        self.game_loop.pause_and_generate_miz(output)
+    def generate_miz(
+        self,
+        output: Path,
+        confirmed_carrier_standoff_findings: list[CarrierStandoffFinding] | None = None,
+    ) -> None:
+        self.game_loop.pause_and_generate_miz(
+            output, confirmed_carrier_standoff_findings
+        )
 
     def wait_for_debriefing(
         self, callback: Callable[[Debriefing], None]

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, status
 from starlette.responses import Response
 
 from game import Game
+from game.utils import meters
 from .models import TgoJs
 from ..dependencies import GameContext
 from ..leaflet import LeafletPoint
@@ -68,7 +69,7 @@ def set_tgo_destination(
     point = Point.from_latlng(
         LatLng(destination.lat, destination.lng), game.theater.terrain
     )
-    if not tgo.destination_in_range(point):
+    if meters(point.distance_to_point(tgo.position)) > tgo.max_move_distance:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot move {tgo} more than "
@@ -84,6 +85,14 @@ def set_tgo_destination(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot move {tgo} over land or out of the sea.",
+        )
+    if not tgo.destination_within_carrier_standoff(point):
+        minimum = (
+            tgo.control_point.coalition.game.settings.carrier_min_standoff_distance
+        )
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot move {tgo} within the configured carrier shore distance of {minimum}nm.",
         )
     tgo.target_position = point
     from .. import EventStream
