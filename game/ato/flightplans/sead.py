@@ -43,9 +43,7 @@ def _loiter_end_time(
     return max(tot, *mate_departures)
 
 
-class SeadFlightPlan(
-    FormationAttackFlightPlan, UiZoneDisplay, TacticalOverlayDisplay
-):
+class SeadFlightPlan(FormationAttackFlightPlan, UiZoneDisplay, TacticalOverlayDisplay):
     @staticmethod
     def builder_type() -> Type[Builder]:
         return Builder
