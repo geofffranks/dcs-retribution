@@ -5,9 +5,11 @@ from typing import Dict, List, Type
 
 from game.settings import Settings
 from .luaplugin import LuaPlugin
+from .mooseatis import MooseAtisPlugin
 from .mooseautolase import MooseAutolasePlugin
 
 _PLUGIN_CLASSES: Dict[str, Type[LuaPlugin]] = {
+    "MooseAtis": MooseAtisPlugin,
     "MooseAutolase": MooseAutolasePlugin,
 }
 

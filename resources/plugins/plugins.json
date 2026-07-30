@@ -15,5 +15,6 @@
     "MooseSoundhandler",    
     "MooseAutolase",
     "MooseMarkerOps",
-    "intercept"
+    "intercept",
+    "MooseAtis"
 ]
