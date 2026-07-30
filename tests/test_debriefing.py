@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import MagicMock
@@ -136,3 +137,14 @@ def test_motorpool_losses_by_type_counts_per_side() -> None:
 
     assert debriefing.motorpool_losses_by_type(Player.BLUE) == {t90: 2, bmp: 1}
     assert debriefing.motorpool_losses_by_type(Player.RED) == {bmp: 1}
+
+
+def test_mission_summary_describes_base_captures() -> None:
+    summary_path = (
+        Path(__file__).resolve().parents[1]
+        / "qt_ui/windows/QWaitingForMissionResultWindow.py"
+    )
+    summary_source = summary_path.read_text(encoding="utf-8")
+
+    assert '"Bases captured"' in summary_source
+    assert '"Bases lost"' not in summary_source
