@@ -15,6 +15,7 @@ from qt_ui.windows.mission.flight.settings.QFlightStartType import QFlightStartT
 from qt_ui.windows.mission.flight.settings.QFlightTypeTaskInfo import (
     QFlightTypeTaskInfo,
 )
+from qt_ui.windows.mission.flight.settings.QTankerOrbitSpeed import QTankerOrbitSpeed
 from qt_ui.windows.mission.flight.waypoints.QFlightWaypointList import (
     QFlightWaypointList,
 )
@@ -56,6 +57,7 @@ class QGeneralFlightSettingsTab(QFrame):
         widgets = [
             QFlightTypeTaskInfo(flight),
             QCommsEditor(flight, game),
+            QTankerOrbitSpeed(flight),
             FlightPlanPropertiesGroup(
                 game.game, package_model, flight, flight_wpt_list
             ),

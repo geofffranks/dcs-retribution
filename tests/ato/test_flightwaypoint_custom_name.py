@@ -1,5 +1,11 @@
 import copy
+from typing import Any
 
+from game.ato.flight import Flight
+from game.ato.flightplans.tankerorbitspeed import (
+    TANKER_ORBIT_SPEED_KIAS_PROP,
+    TANKER_ORBIT_SPEED_MODE_PROP,
+)
 from dcs import Point
 from dcs.terrain import Caucasus
 
@@ -11,6 +17,19 @@ def _wp(pretty_name: str = "[OBJ] : Scud #0") -> FlightWaypoint:
     wp = FlightWaypoint("auto-name", FlightWaypointType.CUSTOM, Point(0, 0, Caucasus()))
     wp.pretty_name = pretty_name
     return wp
+
+
+def test_flight_state_keeps_props_for_serialization() -> None:
+    flight_state: Any = object.__new__(Flight)
+    flight_state.props = {
+        TANKER_ORBIT_SPEED_MODE_PROP: "manual",
+        TANKER_ORBIT_SPEED_KIAS_PROP: 300,
+    }
+    flight_state.state = object()
+
+    state = flight_state.__getstate__()
+    assert state["props"] == flight_state.props
+    assert "state" not in state
 
 
 def test_custom_name_defaults_to_none() -> None:
