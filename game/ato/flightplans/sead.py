@@ -8,8 +8,15 @@ from .formationattack import (
     FormationAttackFlightPlan,
     FormationAttackLayout,
 )
+from .tacticaloverlay import (
+    TacticalOverlay,
+    TacticalOverlayDisplay,
+    loiter_overlay,
+    orbit_radius,
+)
 from .uizonedisplay import UiZone, UiZoneDisplay
 from ..flighttype import FlightType
+from ..flightwaypoint import FlightWaypoint
 from ..flightwaypointtype import FlightWaypointType
 from ...utils import nautical_miles
 
@@ -36,7 +43,9 @@ def _loiter_end_time(
     return max(tot, *mate_departures)
 
 
-class SeadFlightPlan(FormationAttackFlightPlan, UiZoneDisplay):
+class SeadFlightPlan(
+    FormationAttackFlightPlan, UiZoneDisplay, TacticalOverlayDisplay
+):
     @staticmethod
     def builder_type() -> Type[Builder]:
         return Builder
@@ -57,11 +66,30 @@ class SeadFlightPlan(FormationAttackFlightPlan, UiZoneDisplay):
         fallback = self.flight.coalition.game.settings.sead_loiter_max_window_seconds
         return _loiter_end_time(self.tot, mate_departures, fallback)
 
+    @property
+    def _loiter_anchor(self) -> FlightWaypoint:
+        # Standoff loiter point (the "SEAD Search" anchor); fall back to the
+        # target if the layout has no standoff anchor.
+        return self.layout.initial or self.tot_waypoint
+
+    def tactical_overlay(self) -> TacticalOverlay:
+        # SEAD loiters at standoff and reacts to radars near its own position, so
+        # both the orbit and the engagement bubble sit on the loiter anchor.
+        anchor = self._loiter_anchor
+        return loiter_overlay(
+            orbit_center=anchor.position,
+            loiter_radius=orbit_radius(
+                self.flight.unit_type.preferred_patrol_speed(anchor.alt)
+            ),
+            engagement_center=anchor.position,
+            engagement_range=SEAD_ENGAGEMENT_RANGE,
+            target_position=self.tot_waypoint.position,
+        )
+
     def ui_zone(self) -> UiZone:
         # Centre the HARM-reach bubble on the loiter anchor (where the flight orbits and
         # engages), falling back to the target if no anchor was planned.
-        anchor = self.layout.initial or self.tot_waypoint
-        return UiZone([anchor.position], SEAD_ENGAGEMENT_RANGE)
+        return UiZone([self._loiter_anchor.position], SEAD_ENGAGEMENT_RANGE)
 
 
 class Builder(FormationAttackBuilder[SeadFlightPlan, FormationAttackLayout]):
