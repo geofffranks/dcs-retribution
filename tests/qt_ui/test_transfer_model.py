@@ -161,7 +161,7 @@ def test_blue_insert_precedes_visible_red_rows(app: QApplication) -> None:
     model = TransferModel(_game_model(game))
 
     inserts: list[tuple[int, int]] = []
-    model.rowsInserted.connect(
+    cast(Any, model).rowsInserted.connect(
         lambda parent, first, last: inserts.append((first, last))
     )
 
@@ -200,7 +200,7 @@ def test_red_insert_appends(app: QApplication) -> None:
     model = TransferModel(_game_model(game))
 
     inserts: list[tuple[int, int]] = []
-    model.rowsInserted.connect(
+    cast(Any, model).rowsInserted.connect(
         lambda parent, first, last: inserts.append((first, last))
     )
 
@@ -240,7 +240,7 @@ def test_remove_uses_visible_row(app: QApplication) -> None:
     model = TransferModel(_game_model(game))
 
     removals: list[tuple[int, int]] = []
-    model.rowsRemoved.connect(
+    cast(Any, model).rowsRemoved.connect(
         lambda parent, first, last: removals.append((first, last))
     )
 
@@ -286,7 +286,7 @@ def test_visibility_change_resets_model(app: QApplication) -> None:
     assert model.rowCount() == 2
 
     resets: list[int] = []
-    model.modelReset.connect(lambda: resets.append(1))
+    cast(Any, model).modelReset.connect(lambda: resets.append(1))
 
     # Disable enemy management — RED rows become hidden.
     game.settings.enable_enemy_buy_sell = False
@@ -347,10 +347,10 @@ def test_denied_mutation_emits_no_model_signal(app: QApplication) -> None:
 
     inserts: list[tuple[int, int]] = []
     removals: list[tuple[int, int]] = []
-    model.rowsInserted.connect(
+    cast(Any, model).rowsInserted.connect(
         lambda parent, first, last: inserts.append((first, last))
     )
-    model.rowsRemoved.connect(
+    cast(Any, model).rowsRemoved.connect(
         lambda parent, first, last: removals.append((first, last))
     )
 
@@ -374,7 +374,7 @@ def test_unloaded_game_has_no_rows(app: QApplication) -> None:
     model = TransferModel(game_model)
 
     inserts: list[tuple[int, int]] = []
-    model.rowsInserted.connect(
+    cast(Any, model).rowsInserted.connect(
         lambda parent, first, last: inserts.append((first, last))
     )
 

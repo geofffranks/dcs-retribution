@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import textwrap
 import zipfile
 from typing import Callable, Optional, Dict
@@ -575,7 +576,7 @@ class QSettingsWidget(QtWidgets.QWizardPage, SettingsContainer):
         if fd.exec_():
             zipfilename = fd.selectedFiles()[0]
             with zipfile.ZipFile(zipfilename, "r") as zf:
-                filename = zipfilename.split("/")[-1].replace(".zip", ".json")
+                filename = os.path.basename(zipfilename).replace(".zip", ".json")
                 settings = json.loads(
                     zf.read(filename).decode("utf-8"),
                     object_hook=self.settings.obj_hook,
@@ -594,7 +595,7 @@ class QSettingsWidget(QtWidgets.QWizardPage, SettingsContainer):
         if fd.exec_():
             zipfilename = fd.selectedFiles()[0]
             with zipfile.ZipFile(zipfilename, "w", zipfile.ZIP_DEFLATED) as zf:
-                filename = zipfilename.split("/")[-1].replace(".zip", ".json")
+                filename = os.path.basename(zipfilename).replace(".zip", ".json")
                 zf.writestr(
                     filename,
                     json.dumps(
