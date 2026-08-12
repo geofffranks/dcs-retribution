@@ -111,6 +111,18 @@ class MissionGenerator:
             self.mission_data,
         )
         MotorpoolPopulator(self.game).populate()
+        # Flight plans were cached during the planning phase, but the
+        # MotorpoolPopulator above may have added or removed motorpool units
+        # since then (e.g. reserves delivered at turn finalization). Regenerate
+        # every flight plan so motorpool strike/BAI targets — both the ingress
+        # waypoint's bombing-task target list and the per-target waypoints —
+        # match the freshly reconciled motorpool. BAI is unaffected in practice
+        # because BaiIngressBuilder reads target.groups dynamically, but the
+        # StrikeIngressBuilder reads the cached waypoint.targets snapshot.
+        for coalition in self.game.coalitions:
+            for package in coalition.ato.packages:
+                for flight in package.flights:
+                    flight.recreate_flight_plan()
         tgo_generator.generate()
 
         ConvoyGenerator(self.mission, self.game, self.unit_map).generate()

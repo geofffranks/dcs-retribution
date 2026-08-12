@@ -340,6 +340,37 @@ def test_motorpool_strike_client_waypoints_match_targets() -> None:
     assert [target.target for target in targets] == tgo.strike_targets
 
 
+def test_motorpool_strike_regenerates_targets_after_repopulation() -> None:
+    """A strike flight plan built before the MotorpoolPopulator's second pass
+    (e.g. during mission generation) must pick up newly added units when the
+    plan is regenerated.  Without regeneration the cached layout would target
+    one fewer unit than the motorpool actually contains."""
+    abrams = _gut()
+    bradley = next(GroundUnitType.for_dcs_type(Armor.M_2_Bradley))
+    tgo, cp = _motorpool_cp({abrams: 2, bradley: 1}, friendly=False)
+    game = cast("_PopulationGame", _game([cp]))
+    game.next_group_id = MagicMock(side_effect=range(1, 40))
+    game.next_unit_id = MagicMock(side_effect=range(1, 40))
+    MotorpoolPopulator(cast("Game", game)).populate()
+
+    initial_count = len(list(tgo.strike_targets))
+    assert initial_count == 3
+
+    # Simulate the MotorpoolPopulator running again during mission generation
+    # after the reserve has grown (e.g. units delivered at turn finalization).
+    cp.base.armor[abrams] = 3
+    MotorpoolPopulator(cast("Game", game)).populate()
+    assert len(list(tgo.strike_targets)) == 4
+
+    # A fresh layout() call — what recreate_flight_plan triggers — must see
+    # all four targets, not the three from before.
+    targets = _capture_builder_targets(
+        StrikeBuilder, tgo, flight_type=FlightType.STRIKE
+    )
+    assert targets is not None
+    assert len(targets) == 4
+
+
 def test_empty_strike_targets_do_not_divide_by_zero() -> None:
     tgo = _populated_motorpool({_gut(): 0})
     from game.missiongenerator.aircraft.waypoints.strikeingress import (
