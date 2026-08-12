@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Type
 
-from game.theater.theatergroundobject import TheaterGroundObject
+from game.theater.theatergroundobject import MotorpoolGroundObject, TheaterGroundObject
 from .formationattack import (
     FormationAttackBuilder,
     FormationAttackFlightPlan,
@@ -25,15 +25,22 @@ class Builder(FormationAttackBuilder[BaiFlightPlan, FormationAttackLayout]):
 
         from game.transfers import Convoy
 
-        targets: list[StrikeTarget] = []
+        targets: list[StrikeTarget] | None = None
         if isinstance(location, TheaterGroundObject):
-            for group in location.groups:
-                if group.units:
-                    targets.append(
-                        StrikeTarget(f"{group.group_name} at {location.name}", group)
-                    )
+            if isinstance(location, MotorpoolGroundObject):
+                if self.flight.client_count:
+                    targets = [StrikeTarget(location.name, location)]
+            else:
+                targets = []
+                for group in location.groups:
+                    if group.units:
+                        targets.append(
+                            StrikeTarget(
+                                f"{group.group_name} at {location.name}", group
+                            )
+                        )
         elif isinstance(location, Convoy):
-            targets.append(StrikeTarget(location.name, location))
+            targets = [StrikeTarget(location.name, location)]
         else:
             raise InvalidObjectiveLocation(self.flight.flight_type, location)
 

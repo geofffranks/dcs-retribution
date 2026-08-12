@@ -58,7 +58,7 @@ class PendingTransfersList(QListView):
         index = self.indexAt(event.pos())
         if not index.isValid():
             return
-        if not self.transfer_model.transfer_at_index(index).player.is_blue:
+        if not self.can_cancel(index):
             return
 
         menu = QMenu("Menu")
@@ -114,7 +114,8 @@ class PendingTransfersDialog(QDialog):
     def can_cancel(self, index: QModelIndex) -> bool:
         if not index.isValid():
             return False
-        return self.transfer_model.transfer_at_index(index).player.is_blue
+        transfer = self.transfer_model.transfer_at_index(index)
+        return self.transfer_model.can_manage(transfer)
 
     def on_selection_changed(
         self, selected: QItemSelection, _deselected: QItemSelection

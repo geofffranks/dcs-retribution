@@ -12,9 +12,12 @@ import {
   setHoveredEmitter,
 } from "../../api/mapSlice";
 import { useAppDispatch, useAppSelector } from "../../app/hooks";
-import SplitLines from "../splitlines/SplitLines";
 import { MovementPath, MovementPathHandle } from "../controlpoints/MovementPath";
-import { TgoTooltip, iconForTgo } from "./shared";
+import {
+  TgoTooltip,
+  TgoTooltipContent,
+  iconForTgo,
+} from "./shared";
 import { LatLng, Marker as LMarker, LatLngLiteral } from "leaflet";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactDOMServer from "react-dom/server";
@@ -132,13 +135,7 @@ function PrimaryMarker(props: PrimaryMarkerProps) {
     markerRef.current?.setTooltipContent(
       props.tgo.destination
         ? destinationTooltipText(props.tgo, props.tgo.destination, true)
-        : ReactDOMServer.renderToString(
-            <>
-              {`${props.tgo.name} (${props.tgo.control_point_name})`}
-              <br />
-              <SplitLines items={props.tgo.units} />
-            </>
-          )
+        : ReactDOMServer.renderToString(<TgoTooltipContent tgo={props.tgo} />)
     );
   });
 

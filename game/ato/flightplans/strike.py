@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Type
 
 from game.theater import TheaterGroundObject
+from game.theater.theatergroundobject import MotorpoolGroundObject
 from .formationattack import (
     FormationAttackBuilder,
     FormationAttackFlightPlan,
@@ -27,7 +28,15 @@ class Builder(FormationAttackBuilder[StrikeFlightPlan, FormationAttackLayout]):
         if not isinstance(location, TheaterGroundObject):
             raise InvalidObjectiveLocation(self.flight.flight_type, location)
 
-        targets: list[StrikeTarget] = []
+        targets: list[StrikeTarget] | None = None
+        if isinstance(location, MotorpoolGroundObject):
+            targets = [
+                StrikeTarget(f"{unit.type.id} #{idx}", unit)
+                for idx, unit in enumerate(location.strike_targets)
+            ]
+            return self._build(FlightWaypointType.INGRESS_STRIKE, targets)
+
+        targets = []
         for idx, unit in enumerate(location.strike_targets):
             name = unit.type.id
             if isinstance(unit, SceneryUnit):

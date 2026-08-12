@@ -24,6 +24,8 @@
 * **[Flight Plans]** Renaming a waypoint in the flight-plan list now propagates to the aircraft CDU/HUD and the kneeboard, not just the list — one name in all three places (#695).
 * **[Campaigns]** Ability to define motor pool objects which spawn reserve armor
 * **[Campaigns]** Motorpool placement is Garage_A-anchored and empty reserve pools are excluded from attack planning; updated placement measurements are documented.
+* **[Map]** Strategic motorpool markers show parked reserve inventory separately from ground units in transit.
+* **[Mission Generation]** Motorpool targeting now covers populated mixed-unit reserves consistently for BAI and Strike missions.
 * **[UX]** Add the ability to filter campaigns by version, map, and performance
 * **[Engine]** Bump campaign version to 10.9 for motorpool support
 

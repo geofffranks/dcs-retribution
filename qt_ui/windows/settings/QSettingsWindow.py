@@ -5,7 +5,7 @@ import zipfile
 from typing import Callable, Optional, Dict
 
 from PySide6 import QtWidgets
-from PySide6.QtCore import QItemSelectionModel, QPoint, QSize, Qt
+from PySide6.QtCore import QItemSelectionModel, QPoint, QSize, Qt, Signal
 from PySide6.QtGui import QStandardItem, QStandardItemModel, QCloseEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -112,7 +112,7 @@ class CheatSettingsBox(QGroupBox):
         self.opfor_buysell_checkbox.setChecked(sc.settings.enable_enemy_buy_sell)
         self.opfor_buysell_checkbox.toggled.connect(apply_settings)
         self.redfor_buysell_cheat = QLabeledWidget(
-            "Enable OPFOR Buy/Sell actions Cheat:", self.opfor_buysell_checkbox
+            "Enable OPFOR Buy/Sell/Transfer Cheat", self.opfor_buysell_checkbox
         )
         self.main_layout.addLayout(self.redfor_buysell_cheat)
 
@@ -345,10 +345,18 @@ class AutoSettingsPage(QWidget):
 
 
 class QSettingsWindow(QDialog):
+    #: Emitted exactly once when settings are successfully applied, loaded, or
+    #: default-loaded. ``QLiberationWindow.showSettingsDialog`` connects this to
+    #: ``TransferModel.sync_game_and_visibility``.
+    settings_applied = Signal()
+
     def __init__(self, game: Game):
         super().__init__()
         self.game = game
-        self.setLayout(QSettingsWidget(game.settings, game).layout)
+        self.settings_widget = QSettingsWidget(game.settings, game)
+        self.setLayout(self.settings_widget.layout)
+        # Forward successful settings completion to the outer window signal.
+        self.settings_widget.settings_applied.connect(self.settings_applied)
 
         self.setModal(True)
         self.setWindowTitle("Settings")
@@ -367,6 +375,10 @@ class QSettingsWindow(QDialog):
 
 
 class QSettingsWidget(QtWidgets.QWizardPage, SettingsContainer):
+    #: Emitted exactly once when settings are successfully applied, loaded, or
+    #: default-loaded. Cancelled or failed loads emit zero times.
+    settings_applied = Signal()
+
     def __init__(self, settings: Settings, game: Optional[Game] = None):
         super().__init__()
 
@@ -509,11 +521,20 @@ class QSettingsWidget(QtWidgets.QWizardPage, SettingsContainer):
         )
         self.settings.enable_enemy_buy_sell = self.cheat_options.enable_redfor_buysell
 
-        if self.game:
-            events = GameUpdateEvents()
-            self.game.compute_unculled_zones(events)
-            EventStream.put_nowait(events)
-            GameUpdateSignal.get_instance().updateGame(self.game)
+        self._publish_settings_update()
+
+        # Announce successful completion exactly once. The ``updating_ui`` early
+        # return above ensures programmatic refreshes never emit.
+        self.settings_applied.emit()
+
+    def _publish_settings_update(self) -> None:
+        if self.game is None:
+            return
+        events = GameUpdateEvents()
+        self.game.compute_unculled_zones(events)
+        events.update_motorpools_at(*self.game.theater.controlpoints)
+        EventStream.put_nowait(events)
+        GameUpdateSignal.get_instance().updateGame(self.game)
 
     def onSelectionChanged(self) -> None:
         index = self.categoryList.selectionModel().currentIndex().row()
@@ -561,6 +582,10 @@ class QSettingsWidget(QtWidgets.QWizardPage, SettingsContainer):
                 )
                 self.settings.__setstate__(settings)
                 self.update_from_settings()
+            self._publish_settings_update()
+            # Emit exactly once only after an accepted, successfully decoded
+            # and applied archive.
+            self.settings_applied.emit()
 
     def save_settings(self):
         sd = settings_dir()
@@ -610,3 +635,7 @@ class QSettingsWidget(QtWidgets.QWizardPage, SettingsContainer):
                     zipfile.ZIP_DEFLATED,
                 )
             self.settings.__setstate__(default_settings.__dict__)
+
+        self._publish_settings_update()
+        # Emit exactly once after loading or creating/applying defaults.
+        self.settings_applied.emit()
