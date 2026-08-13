@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterator, TYPE_CHECKING
 
-from game.missiongenerator.carrierstandoff import CarrierStandoffFinding
 from .gamelooptimer import GameLoopTimer
 from .gameupdatecallbacks import GameUpdateCallbacks
 from .gameupdateevents import GameUpdateEvents
@@ -67,15 +66,11 @@ class GameLoop:
         while not self.completed:
             self.tick(suppress_events=False)
 
-    def pause_and_generate_miz(
-        self,
-        output: Path,
-        confirmed_carrier_standoff_findings: list[CarrierStandoffFinding] | None = None,
-    ) -> None:
+    def pause_and_generate_miz(self, output: Path) -> None:
         self.pause()
         if not self.started:
             self.start()
-        self.sim.generate_miz(output, confirmed_carrier_standoff_findings)
+        self.sim.generate_miz(output)
 
     def pause_and_debrief(self, state_path: Path, force_end: bool) -> Debriefing:
         self.pause()

@@ -32,11 +32,6 @@ from game.theater.player import Player
 from game.unitmap import UnitMap
 from .atisgenerator import AtisGenerator
 from .briefinggenerator import BriefingGenerator, MissionInfoGenerator
-from .carrierstandoff import (
-    CarrierStandoffFinding,
-    carrier_standoff_preflight,
-    log_carrier_standoff_warning,
-)
 from .cargoshipgenerator import CargoShipGenerator
 from .convoygenerator import ConvoyGenerator
 from .drawingsgenerator import DrawingsGenerator
@@ -92,25 +87,13 @@ class MissionGenerator:
             options["plugins"]["Supercarrier"]["deck_crew"] = sc_deck_crew
             self.mission.options.load_from_dict(options)
 
-    def carrier_standoff_preflight(self) -> list[CarrierStandoffFinding]:
-        """Inspect carrier positions without changing campaign state."""
-        return carrier_standoff_preflight(self.game)
-
-    def generate_miz(
-        self,
-        output: Path,
-        confirmed_carrier_standoff_findings: list[CarrierStandoffFinding] | None = None,
-    ) -> UnitMap:
+    def generate_miz(self, output: Path) -> UnitMap:
         if self.generation_started:
             raise RuntimeError(
                 "Mission has already begun generating. To reset, create a new "
                 "MissionSimulation."
             )
         self.generation_started = True
-        # A non-None value is the UI-confirmed sentinel, including an empty list;
-        # skip the duplicate preflight/log while preserving direct/headless None behavior.
-        if confirmed_carrier_standoff_findings is None:
-            log_carrier_standoff_warning(self.carrier_standoff_preflight())
 
         self.setup_mission_coalitions()
         self.add_airfields_to_unit_map()

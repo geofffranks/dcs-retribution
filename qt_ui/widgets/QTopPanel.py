@@ -15,14 +15,12 @@ from game import Game, persistency
 from game.ato.flightstate import Uninitialized
 from game.ato.package import Package
 from game.ato.traveltime import TotEstimator
-from game.missiongenerator.carrierstandoff import CarrierStandoffFinding
 from game.profiling import logged_duration
 from game.settings.settings import FastForwardStopCondition
 from game.utils import meters
 from qt_ui.models import GameModel
 from qt_ui.simcontroller import SimController
 from qt_ui.uiflags import UiFlags
-from qt_ui.widgets.carrierstandoffwarning import guarded_mission_generation
 from qt_ui.widgets.QBudgetBox import QBudgetBox
 from qt_ui.widgets.QConditionsWidget import QConditionsWidget
 from qt_ui.widgets.QFactionsInfos import QFactionsInfos
@@ -309,20 +307,12 @@ class QTopPanel(QFrame):
         ]:
             with logged_duration("Simulating to first contact"):
                 self.sim_controller.run_to_first_contact()
+        self.sim_controller.generate_miz(
+            persistency.mission_path_for("retribution_nextturn.miz")
+        )
 
-        def _generate_and_wait(
-            standoff_findings: list[CarrierStandoffFinding],
-        ) -> None:
-            self.sim_controller.generate_miz(
-                persistency.mission_path_for("retribution_nextturn.miz"),
-                standoff_findings,
-            )
-            waiting = QWaitingForMissionResultWindow(
-                self.game, self.sim_controller, self
-            )
-            waiting.exec_()
-
-        guarded_mission_generation(self, self.game, _generate_and_wait)
+        waiting = QWaitingForMissionResultWindow(self.game, self.sim_controller, self)
+        waiting.exec_()
 
     def budget_update(self, game: Game):
         self.budgetBox.setGame(game)

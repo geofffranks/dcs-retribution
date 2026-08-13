@@ -761,21 +761,7 @@ class ControlPoint(MissionTarget, SidcDescribable, ABC):
 
     def destination_in_range(self, destination: Point) -> bool:
         distance = meters(destination.distance_to_point(self.position))
-        if distance > self.max_move_distance:
-            return False
-        return self.destination_within_carrier_standoff(destination)
-
-    def destination_within_carrier_standoff(self, destination: Point) -> bool:
-        if not (self.is_carrier or self.is_lha) or self.theater.landmap is None:
-            return True
-        # Use the loaded campaign's global setting intentionally, rather than a CP-local value.
-        minimum = self.coalition.game.settings.carrier_min_standoff_distance
-        if minimum <= 0:
-            return True
-        shore_distance = self.theater.landmap.distance_to_land(destination)
-        return (
-            shore_distance is None or shore_distance >= nautical_miles(minimum).meters
-        )
+        return distance <= self.max_move_distance
 
     @property
     @abstractmethod

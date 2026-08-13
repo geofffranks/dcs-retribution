@@ -7,7 +7,6 @@ from starlette.responses import Response
 
 from game import Game
 from game.theater.player import Player
-from game.utils import meters
 from .models import ControlPointJs
 from ..dependencies import GameContext
 from ..leaflet import LeafletPoint
@@ -85,7 +84,7 @@ def set_destination(
     point = Point.from_latlng(
         LatLng(destination.lat, destination.lng), game.theater.terrain
     )
-    if meters(point.distance_to_point(cp.position)) > cp.max_move_distance:
+    if not cp.destination_in_range(point):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot move {cp} more than "
@@ -99,12 +98,6 @@ def set_destination(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot move {cp} over land.",
-        )
-    if not cp.destination_within_carrier_standoff(point):
-        minimum = cp.coalition.game.settings.carrier_min_standoff_distance
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot move {cp} within the configured carrier shore distance of {minimum}nm.",
         )
     cp.target_position = point
     from .. import EventStream

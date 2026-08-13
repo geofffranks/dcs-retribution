@@ -42,9 +42,6 @@ class Landmap:
         line = LineString([[a.x, a.y], [b.x, b.y]])
         return self.inclusion_zones.intersects(line)
 
-    def distance_to_land(self, point: Point) -> Optional[float]:
-        return distance_to_land(point, self)
-
 
 def load_landmap(filename: Path) -> Optional[Landmap]:
     try:
@@ -61,12 +58,6 @@ def poly_contains(x: float, y: float, poly: Union[MultiPolygon, Polygon]) -> boo
     # is_on_land / is_in_sea call this thousands of times during FLOT + ground-object
     # generation, where it was the top hotspot in a mission-generation profile.
     return bool(shp.contains_xy(poly, x, y))
-
-
-def distance_to_land(point: Point, landmap: Optional[Landmap]) -> Optional[float]:
-    if landmap is None or landmap.inclusion_zone_only.is_empty:
-        return None
-    return geometry.Point(point.x, point.y).distance(landmap.inclusion_zone_only)
 
 
 def to_miz(landmap: Landmap, terrain: Terrain, mission_filename: str) -> None:

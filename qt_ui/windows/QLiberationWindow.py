@@ -36,8 +36,6 @@ from qt_ui.simcontroller import SimController
 from qt_ui.uiconstants import URLS
 from qt_ui.uiflags import UiFlags
 from qt_ui.uncaughtexceptionhandler import UncaughtExceptionHandler
-from game.missiongenerator.carrierstandoff import CarrierStandoffFinding
-from qt_ui.widgets.carrierstandoffwarning import guarded_mission_generation
 from qt_ui.widgets.QTopPanel import QTopPanel
 from qt_ui.widgets.ato import QAirTaskingOrderPanel
 from qt_ui.widgets.map.QLiberationMap import QLiberationMap
@@ -330,34 +328,26 @@ class QLiberationWindow(QMainWindow):
         wizard.accepted.connect(lambda: self.onGameGenerated(wizard.generatedGame))
 
     def newPretenseCampaign(self):
-        def _generate(standoff_findings: list[CarrierStandoffFinding]) -> None:
-            output = persistency.mission_path_for("pretense_campaign.miz")
-            try:
-                PretenseMissionGenerator(
-                    self.game, self.game.conditions.start_time
-                ).generate_miz(output, standoff_findings)
-            except Exception as e:
-                now = datetime.now()
-                date_time = now.strftime("%Y-%d-%mT%H_%M_%S")
-                path = pre_pretense_backups_dir()
-                tgt = path / f"pre-pretense-backup_{date_time}.retribution"
-                path /= f".pre-pretense-backup.retribution"
-                if path.exists():
-                    with open(path, "rb") as source:
-                        with open(tgt, "wb") as target:
-                            target.write(source.read())
-                raise e
+        output = persistency.mission_path_for("pretense_campaign.miz")
+        try:
+            PretenseMissionGenerator(
+                self.game, self.game.conditions.start_time
+            ).generate_miz(output)
+        except Exception as e:
+            now = datetime.now()
+            date_time = now.strftime("%Y-%d-%mT%H_%M_%S")
+            path = pre_pretense_backups_dir()
+            tgt = path / f"pre-pretense-backup_{date_time}.retribution"
+            path /= f".pre-pretense-backup.retribution"
+            if path.exists():
+                with open(path, "rb") as source:
+                    with open(tgt, "wb") as target:
+                        target.write(source.read())
+            raise e
 
-            title = "Pretense campaign generated"
-            msg = (
-                f"A Pretense campaign mission has been successfully generated "
-                f"in {output}"
-            )
-            QMessageBox.information(
-                QApplication.focusWidget(), title, msg, QMessageBox.Ok
-            )
-
-        guarded_mission_generation(self, self.game, _generate)
+        title = "Pretense campaign generated"
+        msg = f"A Pretense campaign mission has been successfully generated in {output}"
+        QMessageBox.information(QApplication.focusWidget(), title, msg, QMessageBox.Ok)
 
     def openFile(self):
         if self.game is not None and self.game.savepath:
