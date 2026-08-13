@@ -29,11 +29,12 @@ import textwrap
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, TYPE_CHECKING, Tuple
+from typing import Dict, Iterator, List, Optional, TYPE_CHECKING, Tuple, Type
 
 from PIL import Image, ImageDraw, ImageFont
 from dcs.mission import Mission
-from dcs.planes import F_15ESE
+from dcs.planes import F_14BU, F_15ESE
+from dcs.unittype import FlyingType
 from suntime import Sun, SunTimeException  # type: ignore
 from tabulate import tabulate
 
@@ -882,14 +883,14 @@ class StrikeTaskPage(KneeboardPage):
             custom_name_title = ""
         writer.title(f"{self.flight.callsign} Strike Task Info{custom_name_title}")
 
-        is_f15e = self.flight.units[0].unit_type == F_15ESE
+        unit_type = self.flight.units[0].unit_type
         writer.table(
             [
                 [
                     str(target.number),
                     writer.wrap_line(
                         self._target_description(
-                            target.waypoint.display_name, i, is_f15e
+                            target.waypoint.display_name, i, unit_type
                         ),
                         self.WAYPOINT_DESC_MAX_LEN,
                     ),
@@ -905,21 +906,28 @@ class StrikeTaskPage(KneeboardPage):
         writer.write(path)
 
     @staticmethod
-    def _target_description(display_name: str, index: int, is_f15e: bool) -> str:
+    def _target_description(
+        display_name: str, index: int, unit_type: Type[FlyingType]
+    ) -> str:
         """The Strike Task 'Description' cell for one target.
 
         Built from the waypoint's display_name so a player's rename shows here too, and
-        NOT written back to the waypoint: the F15E DTC data-cartridge slot reference stays
-        confined to this page. (The previous code mutated pretty_name in place, which both
-        leaked the DTC tag into the list / flight-plan kneeboard and, once renames moved to
+        NOT written back to the waypoint: the DTC / ST slot reference stays confined to
+        this page. (The previous code mutated pretty_name in place, which both leaked the
+        DTC tag into the list / flight-plan kneeboard and, once renames moved to
         custom_name, regressed this page to the long auto name.)
         """
-        if is_f15e:
+        if unit_type == F_15ESE:
             # Slot math must match the CDU data-cartridge programming in
             # PydcsWaypointBuilder.register_special_strike_points ("M{i//8+1}.{i%8+1}")
             # so the kneeboard label points at the slot the jet was actually programmed
             # with -- 8 minor slots per major group.
             return f"{display_name} (DTC M{(index // 8) + 1}.{index % 8 + 1})"
+        if unit_type == F_14BU and index < 8:
+            # Slot math must match the DTC ST-point programming in
+            # PydcsWaypointBuilder.register_special_strike_points (up to 8 "ST" points,
+            # DTC auto-numbers them ST1-ST8).
+            return f"{display_name} (ST{index + 1})"
         return display_name
 
 

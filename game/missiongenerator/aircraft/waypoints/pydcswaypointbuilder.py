@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Iterable, Union
 
 from dcs import Mission
-from dcs.planes import AJS37, F_14A_135_GR, F_14B, JF_17, F_15ESE
+from dcs.planes import AJS37, F_14A_135_GR, F_14B, F_14BU, JF_17, F_15ESE
 from dcs.point import MovingPoint, PointAction
 from dcs.task import ControlledTask, OrbitAction, RunScript
 from dcs.unitgroup import FlyingGroup
@@ -208,13 +208,19 @@ class PydcsWaypointBuilder:
         start: int = 1,
     ) -> None:
         """Create special strike  waypoints for various aircraft"""
+        unit_type = self.group.units[0].unit_type
         for i, t in enumerate(targets):
-            if self.group.units[0].unit_type == JF_17 and i < 4:
+            if unit_type == JF_17 and i < 4:
                 self.group.add_nav_target_point(t.position, "PP" + str(i + 1))
-            if self.group.units[0].unit_type in [F_14B, F_14A_135_GR] and i == 0:
+            if unit_type in [F_14B, F_14A_135_GR] and i == 0:
+                self.group.add_nav_target_point(t.position, "ST")
+            # F-14BU: program up to 8 preplanned surface targets (ST1-ST8).
+            # Slot math must match the kneeboard ST label in
+            # StrikeTaskPage._target_description ("ST{index+1}").
+            if unit_type == F_14BU and i < 8:
                 self.group.add_nav_target_point(t.position, "ST")
             # Add F-15E mission target points as mission 1 (for JDAM for instance)
-            if self.group.units[0].unit_type == F_15ESE:
+            if unit_type == F_15ESE:
                 self.group.add_nav_target_point(
                     t.position, f"M{(i//8)+start}.{i%8+1}\nH-1\nA0\nV0"
                 )
@@ -222,7 +228,7 @@ class PydcsWaypointBuilder:
     def register_special_ingress_points(self) -> None:
         # Register Tomcat Initial Point
         if self.flight.client_count and (
-            self.group.units[0].unit_type in (F_14A_135_GR, F_14B)
+            self.group.units[0].unit_type in (F_14A_135_GR, F_14B, F_14BU)
         ):
             self.group.add_nav_target_point(self.waypoint.position, "IP")
 

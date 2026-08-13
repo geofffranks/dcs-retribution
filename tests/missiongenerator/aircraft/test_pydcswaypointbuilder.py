@@ -1,8 +1,11 @@
 from datetime import datetime, timedelta
 from types import SimpleNamespace
+from typing import List, Tuple, Type
 
 from dcs import Point
+from dcs.planes import F_14B, F_14BU
 from dcs.terrain import Caucasus
+from dcs.unittype import FlyingType
 
 from game.ato.flightplans.waypointbuilder import WaypointBuilder
 from game.ato.flightwaypoint import FlightWaypoint
@@ -157,3 +160,79 @@ def test_anchored_waypoint_locks_for_ai_and_player() -> None:
     # Structural / manual ToTs are always locked, regardless of player presence.
     assert point.ETA_locked is True
     assert point.ETA == int(timedelta(minutes=5).total_seconds())
+
+
+# ---- register_special_strike_points / register_special_ingress_points ----
+
+
+def _make_strike_builder(
+    unit_type: Type[FlyingType],
+    client_count: int = 0,
+) -> Tuple[PydcsWaypointBuilder, List[Tuple[Point, str]]]:
+    """Minimal builder whose fake group records add_nav_target_point calls."""
+    calls: List[Tuple[Point, str]] = []
+    group = SimpleNamespace(
+        units=[SimpleNamespace(unit_type=unit_type)],
+        add_nav_target_point=lambda pos, comment: calls.append((pos, comment)),
+    )
+    builder = PydcsWaypointBuilder.__new__(PydcsWaypointBuilder)
+    builder.group = group  # type: ignore[assignment]
+    builder.flight = SimpleNamespace(client_count=client_count)  # type: ignore[assignment]
+    builder.waypoint = SimpleNamespace(position=Point(42, 42, Caucasus()))  # type: ignore[assignment]
+    return builder, calls
+
+
+def _fake_targets(n: int) -> List[SimpleNamespace]:
+    return [
+        SimpleNamespace(position=Point(i * 1000, i * 1000, Caucasus()))
+        for i in range(n)
+    ]
+
+
+def test_f14bu_registers_up_to_eight_st_points() -> None:
+    """F-14BU gets all targets (up to 8) as ST NavTargetPoints."""
+    builder, calls = _make_strike_builder(F_14BU)
+    builder.register_special_strike_points(_fake_targets(10))  # type: ignore[arg-type]
+    assert len(calls) == 8
+    assert all(comment == "ST" for _, comment in calls)
+
+
+def test_f14bu_all_targets_registered_when_under_eight() -> None:
+    """F-14BU with fewer than 8 targets gets one ST point per target."""
+    builder, calls = _make_strike_builder(F_14BU)
+    builder.register_special_strike_points(_fake_targets(3))  # type: ignore[arg-type]
+    assert len(calls) == 3
+    assert all(comment == "ST" for _, comment in calls)
+
+
+def test_f14b_still_registers_single_st_point() -> None:
+    """F-14B behavior is unchanged: only the first target gets an ST point."""
+    builder, calls = _make_strike_builder(F_14B)
+    builder.register_special_strike_points(_fake_targets(5))  # type: ignore[arg-type]
+    assert len(calls) == 1
+    assert calls[0][1] == "ST"
+
+
+def test_f14a_135_gr_still_registers_single_st_point() -> None:
+    """F-14A-135-GR behavior is unchanged: only the first target gets an ST point."""
+    from dcs.planes import F_14A_135_GR
+
+    builder, calls = _make_strike_builder(F_14A_135_GR)
+    builder.register_special_strike_points(_fake_targets(5))  # type: ignore[arg-type]
+    assert len(calls) == 1
+    assert calls[0][1] == "ST"
+
+
+def test_f14bu_client_flight_gets_ip_point() -> None:
+    """F-14BU client flights get an IP nav target point like F-14B/F-14A."""
+    builder, calls = _make_strike_builder(F_14BU, client_count=1)
+    builder.register_special_ingress_points()
+    assert len(calls) == 1
+    assert calls[0][1] == "IP"
+
+
+def test_f14bu_ai_flight_gets_no_ip_point() -> None:
+    """F-14BU AI flights (client_count=0) do not get an IP nav target point."""
+    builder, calls = _make_strike_builder(F_14BU, client_count=0)
+    builder.register_special_ingress_points()
+    assert len(calls) == 0
