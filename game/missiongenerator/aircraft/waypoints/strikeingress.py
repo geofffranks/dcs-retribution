@@ -6,8 +6,6 @@ from dcs.planes import B_17G, B_52H, Tu_22M3, B_1B, F_15ESE
 from dcs.point import MovingPoint
 from dcs.task import Bombing, Expend, OptFormation, WeaponType, CarpetBombing
 
-from game.theater.theatergroundobject import MotorpoolGroundObject
-from game.theater.theatergroup import TheaterUnit
 from game.utils import mach, meters
 from .pydcswaypointbuilder import PydcsWaypointBuilder
 
@@ -20,24 +18,17 @@ class StrikeIngressBuilder(PydcsWaypointBuilder):
         bomber_guided = self.group.units[0].unit_type in [B_1B, B_52H]
         if bomber_guided or not bomber:
             waypoint.tasks.append(OptFormation.finger_four_open())
-            if not isinstance(self.package.target, MotorpoolGroundObject):
-                self.add_strike_tasks(waypoint, WeaponType.ASM)
+            self.add_strike_tasks(waypoint, WeaponType.ASM)
             waypoint.tasks.append(OptFormation.trail_open())
-            if not isinstance(self.package.target, MotorpoolGroundObject):
-                self.add_strike_tasks(waypoint, WeaponType.GuidedBombs)
+            self.add_strike_tasks(waypoint, WeaponType.GuidedBombs)
 
         waypoint.tasks.append(OptFormation.ww2_bomber_element_close())
-        if isinstance(self.package.target, MotorpoolGroundObject):
-            self.add_strike_tasks(waypoint)
-        else:
-            self.add_bombing_tasks(waypoint)
+        self.add_bombing_tasks(waypoint)
         waypoint.tasks.append(OptFormation.finger_four_open())
         self.register_special_ingress_points()
 
-    def add_bombing_tasks(
-        self, waypoint: MovingPoint, targets: list[TheaterUnit] | None = None
-    ) -> None:
-        targets = self.waypoint.targets if targets is None else targets
+    def add_bombing_tasks(self, waypoint: MovingPoint) -> None:
+        targets = self.waypoint.targets
         if not targets:
             return
 

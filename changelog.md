@@ -25,7 +25,7 @@
 * **[Campaigns]** Ability to define motor pool objects which spawn reserve armor
 * **[Campaigns]** Motorpool placement is Garage_A-anchored and empty reserve pools are excluded from attack planning; updated placement measurements are documented.
 * **[Map]** Strategic motorpool markers show parked reserve inventory separately from ground units in transit.
-* **[Mission Generation]** Motorpool targeting now covers populated mixed-unit reserves consistently for BAI and Strike missions.
+* **[Autoplanner]** Enemy motorpool depots are now attacked via air assault packages (troops destroy the parked reserve) instead of BAI/STRIKE; motorpool-specific BAI and Strike flight-planning changes were reverted in favor of the generic paths.
 * **[UX]** Add the ability to filter campaigns by version, map, and performance
 * **[Engine]** Bump campaign version to 10.9 for motorpool support
 

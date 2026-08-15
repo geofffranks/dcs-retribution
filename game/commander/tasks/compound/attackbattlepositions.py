@@ -1,6 +1,5 @@
 from collections.abc import Iterator
 
-from game.ato.flighttype import FlightType
 from game.commander.tasks.primitive.armedrecon import PlanArmedRecon
 from game.commander.tasks.primitive.bai import PlanBai
 from game.commander.tasks.primitive.motorpool import PlanMotorpoolAttack
@@ -14,12 +13,10 @@ class AttackBattlePositions(CompoundTask[TheaterState]):
             for battle_position in battle_positions.in_priority_order:
                 yield [PlanBai(battle_position)]
         for motorpool in state.motorpool_targets:
-            # BAI is preferred (parked ground forces); STRIKE is the fallback so a
-            # package can still form when no BAI-capable aircraft are available.
-            # Applying either effect removes the target from motorpool_targets, so at
-            # most one package is planned against a given motorpool per turn.
-            yield [PlanMotorpoolAttack(motorpool, FlightType.BAI)]
-            yield [PlanMotorpoolAttack(motorpool, FlightType.STRIKE)]
+            # Air assault inserts troops to destroy the parked reserve. Applying
+            # the effect removes the target from motorpool_targets, so at most
+            # one package is planned against a given motorpool per turn.
+            yield [PlanMotorpoolAttack(motorpool)]
         # Only plan against the 2 most important CPs
         for cp in state.control_point_priority_queue[:2]:
             if not cp.is_fleet:

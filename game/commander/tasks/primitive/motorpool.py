@@ -3,26 +3,26 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from game.ato.flighttype import FlightType
-from game.commander.missionproposals import EscortType
-from game.commander.tasks.packageplanningtask import PackagePlanningTask
 from game.commander.theaterstate import TheaterState
+from game.commander.tasks.packageplanningtask import PackagePlanningTask
 from game.theater.theatergroundobject import MotorpoolGroundObject
 
 
 @dataclass
 class PlanMotorpoolAttack(PackagePlanningTask[MotorpoolGroundObject]):
-    """Plans a strike or BAI package (with escorts) against an enemy motorpool
-    depot, destroying parked reserve armor so the owner must repurchase it.
+    """Plans an air assault package (with escorts) against an enemy motorpool
+    depot, inserting troops to destroy parked reserve armor so the owner must
+    repurchase it.
+
+    Air assault needs no motorpool-specific flight planning: the transport
+    inserts CTLD troops (AT teams among them) near the depot and the debrief
+    attributes the killed vehicles to the motorpool regardless of what killed
+    them. Requires transport-capable squadrons and the CTLD plugin; when none
+    are available no package forms and the motorpool goes unattacked this turn.
 
     Motorpool groups are a reconciled persisted cache (see MotorpoolPopulator).
-    Flight sizing uses this location's rendered ``alive_unit_count`` so a
-    multi-motorpool control point produces one appropriately sized attack per target.
+    The non-empty gate uses this location's rendered ``alive_unit_count``.
     """
-
-    #: BAI is the doctrinal primary (parked ground forces, not in contact); STRIKE
-    #: is the fallback so the package can still form when no BAI-capable aircraft
-    #: are available. Both match what the manual planner offers for a motorpool.
-    task: FlightType
 
     def preconditions_met(self, state: TheaterState) -> bool:
         if self.target not in state.motorpool_targets:
@@ -38,18 +38,7 @@ class PlanMotorpoolAttack(PackagePlanningTask[MotorpoolGroundObject]):
         super().apply_effects(state)
 
     def propose_flights(self) -> None:
-        target_count = self._rendered_unit_count()
-        if self.task is FlightType.BAI:
-            self.propose_flight(FlightType.BAI, min(4, (target_count // 4) + 1))
-        else:
-            self.propose_flight(
-                FlightType.STRIKE,
-                min(4, (target_count // 2) + target_count % 2),
-            )
-            if (
-                self.target.control_point.coalition.game.settings.autoplan_tankers_for_strike
-            ):
-                self.propose_flight(FlightType.REFUELING, 1, EscortType.Refuel)
+        self.propose_flight(FlightType.AIR_ASSAULT, self.get_flight_size())
         self.propose_common_escorts()
 
     def _rendered_unit_count(self) -> int:

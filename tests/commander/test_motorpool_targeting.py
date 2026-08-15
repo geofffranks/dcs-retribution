@@ -10,6 +10,7 @@ from dcs.terrain import Terrain
 from dcs.vehicles import Armor
 
 from game.ato.flighttype import FlightType
+from game.ato.flightwaypointtype import FlightWaypointType
 from game.commander.objectivefinder import ObjectiveFinder
 from game.commander.theatercommander import TheaterCommander
 from game.commander.theaterstate import TheaterState
@@ -18,6 +19,10 @@ from game.commander.tasks.compound.nextaction import PlanNextAction
 from game.commander.tasks.primitive.armedrecon import PlanArmedRecon
 from game.commander.tasks.primitive.bai import PlanBai
 from game.commander.tasks.primitive.motorpool import PlanMotorpoolAttack
+from game.ato.flightplans.airassault import (
+    AirAssaultLayout,
+    Builder as AirAssaultBuilder,
+)
 from game.ato.flightplans.bai import Builder as BaiBuilder
 from game.ato.flightplans.formationattack import FormationAttackLayout
 from game.ato.flightplans.strike import Builder as StrikeBuilder
@@ -25,7 +30,7 @@ from game.ato.flightplans.waypointbuilder import StrikeTarget
 from game.data.groups import GroupTask
 from game.missiongenerator.motorpoolpopulator import MotorpoolPopulator
 from game.dcs.groundunittype import GroundUnitType
-from game.theater.controlpoint import ControlPoint
+from game.theater.controlpoint import ControlPoint, ControlPointType
 from game.theater.player import Player
 from game.theater.presetlocation import PresetLocation
 from game.theater.theatergroundobject import MotorpoolGroundObject
@@ -121,7 +126,7 @@ def test_standalone_attack_motorpools_module_is_retired() -> None:
     )
 
 
-# --- ObjectiveFinder.motorpool_targets ---------------------------------------
+# --- TheaterCommander / ObjectiveFinder.motorpool_targets ---------------------
 
 
 def test_plan_missions_populates_motorpools_before_building_state() -> None:
@@ -169,25 +174,23 @@ def _populated_motorpool(
 def _capture_builder_targets(
     builder_type: type[object],
     tgo: MotorpoolGroundObject,
-    client_count: int = 0,
     flight_type: FlightType = FlightType.BAI,
-) -> list[StrikeTarget] | None:
+) -> list[StrikeTarget]:
     builder = cast(_BuilderTestDouble, object.__new__(builder_type))
     builder.flight = cast(
         _BuilderFlight,
         SimpleNamespace(
             package=SimpleNamespace(target=tgo),
             flight_type=flight_type,
-            client_count=client_count,
+            client_count=0,
         ),
     )
-    captured: list[StrikeTarget] | None = None
+    captured: list[StrikeTarget] = []
 
     def capture(
         _ingress: object, targets: list[StrikeTarget] | None = None
     ) -> FormationAttackLayout:
-        nonlocal captured
-        captured = targets
+        captured.extend(targets or [])
         return cast(FormationAttackLayout, object())
 
     builder._build = capture
@@ -195,43 +198,12 @@ def _capture_builder_targets(
     return captured
 
 
-def test_player_motorpool_bai_layout_targets_motorpool_location_once() -> None:
-    abrams = _gut()
-    bradley = next(GroundUnitType.for_dcs_type(Armor.M_2_Bradley))
-    tgo = _populated_motorpool({abrams: 2, bradley: 1})
-
-    targets = _capture_builder_targets(BaiBuilder, tgo, client_count=1)
-
-    assert targets is not None
-    assert len(targets) == 1
-    assert targets[0].target is tgo
-
-
-def test_ai_motorpool_bai_layout_uses_a_target_zone() -> None:
-    abrams = _gut()
-    bradley = next(GroundUnitType.for_dcs_type(Armor.M_2_Bradley))
-    tgo = _populated_motorpool({abrams: 2, bradley: 1})
-
-    targets = _capture_builder_targets(BaiBuilder, tgo)
-
-    assert targets is None
-
-
-def test_motorpool_strike_layout_exposes_populated_vehicles_to_ai() -> None:
-    abrams = _gut()
-    bradley = next(GroundUnitType.for_dcs_type(Armor.M_2_Bradley))
-    tgo = _populated_motorpool({abrams: 2, bradley: 1})
-
-    targets = _capture_builder_targets(StrikeBuilder, tgo)
-
-    assert targets is not None
-    assert [target.target for target in targets] == tgo.strike_targets
-
-
 def test_motorpool_layouts_have_no_targets_when_reserve_is_empty() -> None:
     tgo = _populated_motorpool({_gut(): 0})
 
-    assert _capture_builder_targets(BaiBuilder, tgo) is None
+    # Upstream semantics: with no rendered groups the builders pass an empty
+    # target list, so the layout falls back to a single target-area waypoint.
+    assert _capture_builder_targets(BaiBuilder, tgo) == []
     assert _capture_builder_targets(StrikeBuilder, tgo) == []
 
 
@@ -265,110 +237,6 @@ def _build_motorpool_ingress_builder(
         alt=feet(1000),
     )
     return builder, SimpleNamespace(tasks=[], alt=304.8)
-
-
-def test_motorpool_bai_creates_attack_group_per_group() -> None:
-    abrams = _gut()
-    bradley = next(GroundUnitType.for_dcs_type(Armor.M_2_Bradley))
-    tgo = _populated_motorpool({abrams: 2, bradley: 1})
-    from game.missiongenerator.aircraft.waypoints.baiingress import BaiIngressBuilder
-
-    builder, waypoint = _build_motorpool_ingress_builder(BaiIngressBuilder, tgo)
-    builder.add_tasks(waypoint)
-
-    from dcs.task import AttackGroup, EngageTargetsInZone
-
-    attack_tasks = [task for task in waypoint.tasks if isinstance(task, AttackGroup)]
-    # One AttackGroup per motorpool vehicle-type group. AttackGroup is a waypoint
-    # task (not an enroute task), so it does not propagate to subsequent waypoints
-    # the way EngageTargetsInZone did.
-    assert len(attack_tasks) == len(tgo.groups)
-    assert not [
-        task for task in waypoint.tasks if isinstance(task, EngageTargetsInZone)
-    ]
-
-
-def test_motorpool_strike_ingress_uses_bombing_for_ai() -> None:
-    tgo = _populated_motorpool({_gut(): 10})
-    from game.missiongenerator.aircraft.waypoints.strikeingress import (
-        StrikeIngressBuilder,
-    )
-
-    builder, waypoint = _build_motorpool_ingress_builder(StrikeIngressBuilder, tgo)
-    builder.add_tasks(waypoint)
-
-    from dcs.task import Bombing
-
-    assert [task for task in waypoint.tasks if isinstance(task, Bombing)]
-
-
-def test_motorpool_strike_ingress_bombs_each_target_once() -> None:
-    abrams = _gut()
-    bradley = next(GroundUnitType.for_dcs_type(Armor.M_2_Bradley))
-    tgo = _populated_motorpool({abrams: 2, bradley: 1})
-    from game.missiongenerator.aircraft.waypoints.strikeingress import (
-        StrikeIngressBuilder,
-    )
-
-    builder, waypoint = _build_motorpool_ingress_builder(StrikeIngressBuilder, tgo)
-    builder.add_tasks(waypoint)
-
-    from dcs.task import Bombing
-
-    bombing_tasks = [task for task in waypoint.tasks if isinstance(task, Bombing)]
-    targets = list(tgo.strike_targets)
-    # One coordinate Bombing task per rendered target, at that target's position.
-    assert len(bombing_tasks) == len(targets)
-    expected_positions = {(t.position.x, t.position.y) for t in targets}
-    actual_positions = {(task.params["x"], task.params["y"]) for task in bombing_tasks}
-    assert actual_positions == expected_positions
-
-
-def test_motorpool_strike_client_waypoints_match_targets() -> None:
-    abrams = _gut()
-    bradley = next(GroundUnitType.for_dcs_type(Armor.M_2_Bradley))
-    tgo = _populated_motorpool({abrams: 2, bradley: 1})
-
-    targets = _capture_builder_targets(
-        StrikeBuilder, tgo, flight_type=FlightType.STRIKE
-    )
-
-    assert targets is not None
-    # One StrikeTarget per rendered motorpool unit; client target waypoints are
-    # built one-per-target by the formation layout.
-    assert len(targets) == len(tgo.strike_targets)
-    assert [target.target for target in targets] == tgo.strike_targets
-
-
-def test_motorpool_strike_regenerates_targets_after_repopulation() -> None:
-    """A strike flight plan built before the MotorpoolPopulator's second pass
-    (e.g. during mission generation) must pick up newly added units when the
-    plan is regenerated.  Without regeneration the cached layout would target
-    one fewer unit than the motorpool actually contains."""
-    abrams = _gut()
-    bradley = next(GroundUnitType.for_dcs_type(Armor.M_2_Bradley))
-    tgo, cp = _motorpool_cp({abrams: 2, bradley: 1}, friendly=False)
-    game = cast("_PopulationGame", _game([cp]))
-    game.next_group_id = MagicMock(side_effect=range(1, 40))
-    game.next_unit_id = MagicMock(side_effect=range(1, 40))
-    MotorpoolPopulator(cast("Game", game)).populate()
-
-    initial_count = len(list(tgo.strike_targets))
-    assert initial_count == 3
-
-    # Simulate the MotorpoolPopulator running again during mission generation
-    # after the reserve has grown (e.g. units delivered at turn finalization).
-    cp.base.armor[abrams] = 3
-    MotorpoolPopulator(cast("Game", game)).populate()
-    assert len(list(tgo.strike_targets)) == 4
-
-    # A fresh layout() call — what recreate_flight_plan triggers — must see
-    # all four targets, not the three from before.
-    targets = _capture_builder_targets(
-        StrikeBuilder, tgo, flight_type=FlightType.STRIKE
-    )
-    assert targets is not None
-    assert len(targets) == 4
 
 
 def test_empty_strike_targets_do_not_divide_by_zero() -> None:
@@ -449,6 +317,27 @@ def test_motorpool_targets_sorted_nearest_first() -> None:
     assert targets == [near_tgo, far_tgo]
 
 
+# --- MotorpoolGroundObject.mission_types --------------------------------------
+
+
+def test_motorpool_mission_types_offer_air_assault_not_bai() -> None:
+    tgo, _ = _motorpool_cp({_gut(): 2}, friendly=False)
+    mission_types = list(tgo.mission_types(Player.BLUE))
+    assert FlightType.AIR_ASSAULT in mission_types
+    assert FlightType.BAI not in mission_types
+    # STRIKE remains available through the inherited generic TGO path.
+    assert FlightType.STRIKE in mission_types
+
+
+def test_friendly_motorpool_offers_no_attack_mission_types() -> None:
+    tgo, _ = _motorpool_cp({_gut(): 2}, friendly=True)
+    mission_types = list(tgo.mission_types(Player.BLUE))
+    # Only defensive missions (e.g. BARCAP) may be planned against friendly TGOs.
+    assert FlightType.AIR_ASSAULT not in mission_types
+    assert FlightType.BAI not in mission_types
+    assert FlightType.STRIKE not in mission_types
+
+
 # --- PlanMotorpoolAttack ------------------------------------------------------
 
 
@@ -459,8 +348,12 @@ def _motorpool_target(reserve_count: int) -> MotorpoolGroundObject:
     settings.motorpool_spawn_cap = 10
     settings.motorpool_enabled = True
     settings.autoplan_tankers_for_strike = False
+    # Deterministic flight sizing: always a 2-ship.
+    settings.fpa_2ship_weight = 1
+    settings.fpa_3ship_weight = 0
+    settings.fpa_4ship_weight = 0
     # Render the reserve slice into the motorpool's persisted groups so the
-    # per-location projection (tgo.units) reflects what is actually strikeable.
+    # per-location projection (tgo.units) reflects what is actually parked.
     game = cast(_PopulationGame, _game([cp, _friendly_cp()]))
     game.next_group_id = MagicMock(side_effect=[1, 2, 3])
     game.next_unit_id = MagicMock(side_effect=range(1, 20))
@@ -468,33 +361,26 @@ def _motorpool_target(reserve_count: int) -> MotorpoolGroundObject:
     return tgo
 
 
-def test_motorpool_bai_proposes_bai_plus_escorts() -> None:
+def test_motorpool_attack_proposes_air_assault_plus_escorts() -> None:
     tgo = _motorpool_target(8)
-    task = PlanMotorpoolAttack(tgo, FlightType.BAI)
+    task = PlanMotorpoolAttack(tgo)
     task.propose_flights()
-    flight_tasks = [f.task for f in task.flights]
-    assert FlightType.BAI in flight_tasks
-    assert FlightType.STRIKE not in flight_tasks
-    assert FlightType.SEAD_ESCORT in flight_tasks
-    assert FlightType.ESCORT in flight_tasks
-    assert FlightType.SEAD_SWEEP in flight_tasks
-
-
-def test_motorpool_strike_proposes_strike_plus_escorts() -> None:
-    tgo = _motorpool_target(8)
-    task = PlanMotorpoolAttack(tgo, FlightType.STRIKE)
-    task.propose_flights()
-    flight_tasks = [f.task for f in task.flights]
-    assert FlightType.STRIKE in flight_tasks
-    assert FlightType.BAI not in flight_tasks
-    assert FlightType.SEAD_ESCORT in flight_tasks
+    flights = list(task.flights)
+    assert [flight.task for flight in flights] == [
+        FlightType.AIR_ASSAULT,
+        FlightType.SEAD_ESCORT,
+        FlightType.ESCORT,
+        FlightType.SEAD_SWEEP,
+    ]
+    air_assault = flights[0]
+    assert air_assault.num_aircraft == 2
 
 
 def test_motorpool_attack_effect_removes_target() -> None:
     tgo = _motorpool_target(4)
     other = _motorpool_target(4)
     state = SimpleNamespace(motorpool_targets=[tgo, other])
-    task = PlanMotorpoolAttack(tgo, FlightType.BAI)
+    task = PlanMotorpoolAttack(tgo)
     task.package = None  # super().apply_effects is a no-op with no package
     task.apply_effects(state)  # type: ignore[arg-type]
     assert state.motorpool_targets == [other]
@@ -503,7 +389,7 @@ def test_motorpool_attack_effect_removes_target() -> None:
 def test_motorpool_attack_precondition_fails_when_not_listed() -> None:
     tgo = _motorpool_target(4)
     state = SimpleNamespace(motorpool_targets=[])
-    task = PlanMotorpoolAttack(tgo, FlightType.BAI)
+    task = PlanMotorpoolAttack(tgo)
     # Target absent: short-circuits before the heavy fulfillment path.
     assert task.preconditions_met(state) is False  # type: ignore[arg-type]
 
@@ -511,54 +397,11 @@ def test_motorpool_attack_precondition_fails_when_not_listed() -> None:
 def test_motorpool_attack_precondition_fails_when_reserve_is_empty() -> None:
     tgo = _motorpool_target(0)
     state = SimpleNamespace(motorpool_targets=[tgo])
-    task = PlanMotorpoolAttack(tgo, FlightType.BAI)
+    task = PlanMotorpoolAttack(tgo)
     assert task.preconditions_met(state) is False  # type: ignore[arg-type]
 
 
-def test_motorpool_attack_propose_uses_per_location_rendered_units() -> None:
-    # A CP with a large reserve spread across two motorpools: each motorpool
-    # renders only its own slice, so flight sizing follows the per-location
-    # rendered count, not the control-point-wide reserve total.
-    gut = _gut()
-    loc_a = PresetLocation(
-        "A", Point(0.0, 0.0, MagicMock(spec=Terrain)), Heading.from_degrees(0.0)
-    )
-    loc_b = PresetLocation(
-        "B", Point(0.0, 0.0, MagicMock(spec=Terrain)), Heading.from_degrees(0.0)
-    )
-    cp = MagicMock(spec=ControlPoint)
-    cp.is_friendly = MagicMock(return_value=False)
-    cp.captured = Player.RED
-    cp.base = SimpleNamespace(armor={gut: 8}, total_armor=8)
-    cp.connected_points = []  # rear CP: reserve == full pool
-    cp.name = "CP"
-    tgo_a = MotorpoolGroundObject("CP Motorpool 0", loc_a, cp, GroupTask.MOTORPOOL)
-    tgo_b = MotorpoolGroundObject("CP Motorpool 1", loc_b, cp, GroupTask.MOTORPOOL)
-    tgo_a.distance_to = MagicMock(return_value=100.0)  # type: ignore[method-assign]
-    tgo_b.distance_to = MagicMock(return_value=100.0)  # type: ignore[method-assign]
-    cp.ground_objects = [tgo_a, tgo_b]
-    settings = cp.coalition.game.settings
-    settings.motorpool_spawn_cap = 4
-    settings.motorpool_enabled = True
-    settings.autoplan_tankers_for_strike = False
-    game = cast(_PopulationGame, _game([cp, _friendly_cp()], cap=4))
-    game.next_group_id = MagicMock(side_effect=range(1, 40))
-    game.next_unit_id = MagicMock(side_effect=range(1, 40))
-    MotorpoolPopulator(cast("Game", game)).populate()
-
-    # Two motorpools split the 4-unit cap 2/2.
-    assert tgo_a.alive_unit_count == 2
-    assert tgo_b.alive_unit_count == 2
-
-    # The BAI flight for tgo_a is sized from its own 2 rendered units, not the
-    # CP-wide reserve of 8.
-    task = PlanMotorpoolAttack(tgo_a, FlightType.BAI)
-    task.propose_flights()
-    bai = next(f for f in task.flights if f.task == FlightType.BAI)
-    assert bai.num_aircraft == min(4, (2 // 4) + 1)
-
-
-def test_attack_battle_positions_preserves_motorpool_bai_then_strike_fallback() -> None:
+def test_attack_battle_positions_yields_single_motorpool_air_assault() -> None:
     motorpool = _motorpool_target(4)
     state = cast(
         "TheaterState",
@@ -574,14 +417,11 @@ def test_attack_battle_positions_preserves_motorpool_bai_then_strike_fallback() 
         method[0] for method in methods if isinstance(method[0], PlanMotorpoolAttack)
     ]
 
-    assert [task.task for task in motorpool_tasks] == [
-        FlightType.BAI,
-        FlightType.STRIKE,
-    ]
-    assert [task.target for task in motorpool_tasks] == [motorpool, motorpool]
+    assert len(motorpool_tasks) == 1
+    assert motorpool_tasks[0].target is motorpool
 
 
-def test_plan_next_action_orders_bai_motorpool_fallback_before_armed_recon() -> None:
+def test_plan_next_action_orders_motorpool_air_assault_before_armed_recon() -> None:
     battle_position = object()
     motorpool = _motorpool_target(4)
     recon_target = SimpleNamespace(is_fleet=False)
@@ -610,18 +450,13 @@ def test_plan_next_action_orders_bai_motorpool_fallback_before_armed_recon() -> 
     assert [type(task) for task in proposal_tasks] == [
         PlanBai,
         PlanMotorpoolAttack,
-        PlanMotorpoolAttack,
         PlanArmedRecon,
     ]
     assert [_task_target(task) for task in proposal_tasks] == [
         battle_position,
         motorpool,
-        motorpool,
         recon_target,
     ]
-    assert [
-        task.task for task in proposal_tasks if isinstance(task, PlanMotorpoolAttack)
-    ] == [FlightType.BAI, FlightType.STRIKE]
 
 
 def test_plan_next_action_omits_empty_motorpool_proposals() -> None:
@@ -654,3 +489,84 @@ def test_plan_next_action_omits_empty_motorpool_proposals() -> None:
         battle_position,
         recon_target,
     ]
+
+
+# --- Air assault needs no motorpool-specific planning --------------------------
+
+
+def _air_assault_builder(tgo: MotorpoolGroundObject) -> AirAssaultBuilder:
+    terrain = MagicMock(spec=Terrain)
+    departure_position = Point(-60000.0, 40000.0, terrain)
+    ingress_position = Point(-20000.0, 0.0, terrain)
+
+    doctrine = SimpleNamespace(
+        min_combat_altitude=feet(1000), max_combat_altitude=feet(30000)
+    )
+    settings = SimpleNamespace(heli_combat_alt_agl=500)
+    theater = SimpleNamespace(nearest_land_pos=lambda pos: pos)
+    coalition = SimpleNamespace(
+        doctrine=doctrine,
+        opponent=SimpleNamespace(threat_zone=None),
+        nav_mesh=SimpleNamespace(shortest_path=lambda a, b: [a, b]),
+        bullseye=SimpleNamespace(position=Point(0.0, 0.0, terrain)),
+        game=SimpleNamespace(settings=settings, theater=theater),
+    )
+
+    package = SimpleNamespace(
+        target=tgo,
+        waypoints=SimpleNamespace(
+            ingress=ingress_position,
+            initial=ingress_position,
+            join=ingress_position,
+            split=departure_position,
+            refuel=ingress_position,
+        ),
+    )
+    flight: Any = SimpleNamespace(
+        is_helo=True,
+        is_hercules=False,
+        coalition=coalition,
+        package=package,
+        departure=SimpleNamespace(
+            cptype=ControlPointType.LHA_GROUP, position=departure_position
+        ),
+        arrival=SimpleNamespace(position=departure_position),
+        divert=None,
+        unit_type=SimpleNamespace(
+            preferred_cruise_altitude=feet(2000),
+            preferred_combat_altitude=feet(1000),
+        ),
+        plane_altitude_offset=0,
+    )
+
+    builder: Any = object.__new__(AirAssaultBuilder)
+    builder.flight = flight
+    builder.settings = settings
+    return builder
+
+
+def test_air_assault_layout_builds_against_motorpool_target() -> None:
+    """Air assault planning is generic over MissionTarget: a motorpool TGO must
+    produce a valid layout — drop-off short of the depot and the CTLD target
+    zone at the depot — without any motorpool-specific planning code."""
+    tgo, _ = _motorpool_cp({_gut(): 2}, friendly=False)
+
+    layout = _air_assault_builder(tgo).layout()
+    assert isinstance(layout, AirAssaultLayout)
+
+    # Troops are landed a combat drop away from the depot, not on it.
+    assert layout.drop_off is not None
+    drop_distance = tgo.position.distance_to_point(layout.drop_off.position)
+    assert 900 <= drop_distance <= 1500
+
+    # The assault area (CTLD target zone the troops advance to) is the depot.
+    assert len(layout.targets) == 1
+    assert layout.targets[0].position == tgo.position
+    assert layout.targets[0].waypoint_type is FlightWaypointType.TARGET_GROUP_LOC
+
+    # The layout is flyable end to end, with the drop-off before the assault
+    # area so transports land before the troops advance.
+    waypoints = list(layout.iter_waypoints())
+    assert layout.drop_off in waypoints
+    assert layout.targets[0] in waypoints
+    assert waypoints.index(layout.drop_off) < waypoints.index(layout.targets[0])

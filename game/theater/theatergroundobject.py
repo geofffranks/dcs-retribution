@@ -714,7 +714,7 @@ class MotorpoolGroundObject(TheaterGroundObject):
         from game.ato import FlightType
 
         if not self.is_friendly(for_player):
-            yield FlightType.BAI
+            yield FlightType.AIR_ASSAULT
         yield from super().mission_types(for_player)
 
     @property
