@@ -187,10 +187,8 @@ def _capture_builder_targets(
     )
     captured: list[StrikeTarget] = []
 
-    def capture(
-        _ingress: object, targets: list[StrikeTarget] | None = None
-    ) -> FormationAttackLayout:
-        captured.extend(targets or [])
+    def capture(_ingress: object, targets: list[StrikeTarget]) -> FormationAttackLayout:
+        captured.extend(targets)
         return cast(FormationAttackLayout, object())
 
     builder._build = capture
