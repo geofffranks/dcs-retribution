@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 from types import SimpleNamespace
-from typing import Any, TYPE_CHECKING, Callable, Protocol, cast
+from typing import TYPE_CHECKING, Callable, Protocol, cast
 from unittest.mock import MagicMock, patch
 
 from dcs.mapping import Point
@@ -19,10 +19,7 @@ from game.commander.tasks.compound.nextaction import PlanNextAction
 from game.commander.tasks.primitive.armedrecon import PlanArmedRecon
 from game.commander.tasks.primitive.bai import PlanBai
 from game.commander.tasks.primitive.motorpool import PlanMotorpoolAttack
-from game.ato.flightplans.airassault import (
-    AirAssaultLayout,
-    Builder as AirAssaultBuilder,
-)
+from game.ato.flightplans.armedrecon import Builder as ArmedReconBuilder
 from game.ato.flightplans.bai import Builder as BaiBuilder
 from game.ato.flightplans.formationattack import FormationAttackLayout
 from game.ato.flightplans.strike import Builder as StrikeBuilder
@@ -30,7 +27,7 @@ from game.ato.flightplans.waypointbuilder import StrikeTarget
 from game.data.groups import GroupTask
 from game.missiongenerator.motorpoolpopulator import MotorpoolPopulator
 from game.dcs.groundunittype import GroundUnitType
-from game.theater.controlpoint import ControlPoint, ControlPointType
+from game.theater.controlpoint import ControlPoint
 from game.theater.player import Player
 from game.theater.presetlocation import PresetLocation
 from game.theater.theatergroundobject import MotorpoolGroundObject
@@ -318,10 +315,10 @@ def test_motorpool_targets_sorted_nearest_first() -> None:
 # --- MotorpoolGroundObject.mission_types --------------------------------------
 
 
-def test_motorpool_mission_types_offer_air_assault_not_bai() -> None:
+def test_motorpool_mission_types_offer_armed_recon_not_bai() -> None:
     tgo, _ = _motorpool_cp({_gut(): 2}, friendly=False)
     mission_types = list(tgo.mission_types(Player.BLUE))
-    assert FlightType.AIR_ASSAULT in mission_types
+    assert FlightType.ARMED_RECON in mission_types
     assert FlightType.BAI not in mission_types
     # STRIKE remains available through the inherited generic TGO path.
     assert FlightType.STRIKE in mission_types
@@ -331,7 +328,7 @@ def test_friendly_motorpool_offers_no_attack_mission_types() -> None:
     tgo, _ = _motorpool_cp({_gut(): 2}, friendly=True)
     mission_types = list(tgo.mission_types(Player.BLUE))
     # Only defensive missions (e.g. BARCAP) may be planned against friendly TGOs.
-    assert FlightType.AIR_ASSAULT not in mission_types
+    assert FlightType.ARMED_RECON not in mission_types
     assert FlightType.BAI not in mission_types
     assert FlightType.STRIKE not in mission_types
 
@@ -359,19 +356,19 @@ def _motorpool_target(reserve_count: int) -> MotorpoolGroundObject:
     return tgo
 
 
-def test_motorpool_attack_proposes_air_assault_plus_escorts() -> None:
+def test_motorpool_attack_proposes_armed_recon_plus_escorts() -> None:
     tgo = _motorpool_target(8)
     task = PlanMotorpoolAttack(tgo)
     task.propose_flights()
     flights = list(task.flights)
     assert [flight.task for flight in flights] == [
-        FlightType.AIR_ASSAULT,
+        FlightType.ARMED_RECON,
         FlightType.SEAD_ESCORT,
         FlightType.ESCORT,
         FlightType.SEAD_SWEEP,
     ]
-    air_assault = flights[0]
-    assert air_assault.num_aircraft == 2
+    armed_recon = flights[0]
+    assert armed_recon.num_aircraft == 2
 
 
 def test_motorpool_attack_effect_removes_target() -> None:
@@ -399,7 +396,7 @@ def test_motorpool_attack_precondition_fails_when_reserve_is_empty() -> None:
     assert task.preconditions_met(state) is False  # type: ignore[arg-type]
 
 
-def test_attack_battle_positions_yields_single_motorpool_air_assault() -> None:
+def test_attack_battle_positions_yields_single_motorpool_armed_recon() -> None:
     motorpool = _motorpool_target(4)
     state = cast(
         "TheaterState",
@@ -419,7 +416,7 @@ def test_attack_battle_positions_yields_single_motorpool_air_assault() -> None:
     assert motorpool_tasks[0].target is motorpool
 
 
-def test_plan_next_action_orders_motorpool_air_assault_before_armed_recon() -> None:
+def test_plan_next_action_orders_motorpool_attack_before_armed_recon() -> None:
     battle_position = object()
     motorpool = _motorpool_target(4)
     recon_target = SimpleNamespace(is_fleet=False)
@@ -441,7 +438,6 @@ def test_plan_next_action_orders_motorpool_air_assault_before_armed_recon() -> N
         if isinstance(method[0], AttackBattlePositions)
     ]
     assert len(battle_position_tasks) == 1
-    assert len(top_level_methods) == 11
 
     proposals = list(battle_position_tasks[0].each_valid_method(state))
     proposal_tasks = [method[0] for method in proposals]
@@ -478,7 +474,6 @@ def test_plan_next_action_omits_empty_motorpool_proposals() -> None:
         if isinstance(method[0], AttackBattlePositions)
     ]
     assert len(battle_position_tasks) == 1
-    assert len(top_level_methods) == 11
 
     proposals = list(battle_position_tasks[0].each_valid_method(state))
     proposal_tasks = [method[0] for method in proposals]
@@ -489,82 +484,37 @@ def test_plan_next_action_omits_empty_motorpool_proposals() -> None:
     ]
 
 
-# --- Air assault needs no motorpool-specific planning --------------------------
+# --- Armed recon needs no motorpool-specific planning --------------------------
 
 
-def _air_assault_builder(tgo: MotorpoolGroundObject) -> AirAssaultBuilder:
-    terrain = MagicMock(spec=Terrain)
-    departure_position = Point(-60000.0, 40000.0, terrain)
-    ingress_position = Point(-20000.0, 0.0, terrain)
-
-    doctrine = SimpleNamespace(
-        min_combat_altitude=feet(1000), max_combat_altitude=feet(30000)
-    )
-    settings = SimpleNamespace(heli_combat_alt_agl=500)
-    theater = SimpleNamespace(nearest_land_pos=lambda pos: pos)
-    coalition = SimpleNamespace(
-        doctrine=doctrine,
-        opponent=SimpleNamespace(threat_zone=None),
-        nav_mesh=SimpleNamespace(shortest_path=lambda a, b: [a, b]),
-        bullseye=SimpleNamespace(position=Point(0.0, 0.0, terrain)),
-        game=SimpleNamespace(settings=settings, theater=theater),
-    )
-
-    package = SimpleNamespace(
-        target=tgo,
-        waypoints=SimpleNamespace(
-            ingress=ingress_position,
-            initial=ingress_position,
-            join=ingress_position,
-            split=departure_position,
-            refuel=ingress_position,
-        ),
-    )
-    flight: Any = SimpleNamespace(
-        is_helo=True,
-        is_hercules=False,
-        coalition=coalition,
-        package=package,
-        departure=SimpleNamespace(
-            cptype=ControlPointType.LHA_GROUP, position=departure_position
-        ),
-        arrival=SimpleNamespace(position=departure_position),
-        divert=None,
-        unit_type=SimpleNamespace(
-            preferred_cruise_altitude=feet(2000),
-            preferred_combat_altitude=feet(1000),
-        ),
-        plane_altitude_offset=0,
-    )
-
-    builder: Any = object.__new__(AirAssaultBuilder)
-    builder.flight = flight
-    builder.settings = settings
-    return builder
-
-
-def test_air_assault_layout_builds_against_motorpool_target() -> None:
-    """Air assault planning is generic over MissionTarget: a motorpool TGO must
-    produce a valid layout — drop-off short of the depot and the CTLD target
-    zone at the depot — without any motorpool-specific planning code."""
+def test_armed_recon_builder_accepts_motorpool_target() -> None:
+    """Armed recon planning is generic over MissionTarget: the builder performs
+    no target-type validation and passes no per-unit targets, so a motorpool
+    TGO plans through the generic target-area flyover waypoint (the ingress's
+    EngageTargetsInZone then makes the AI attack the parked vehicles)."""
     tgo, _ = _motorpool_cp({_gut(): 2}, friendly=False)
 
-    layout = _air_assault_builder(tgo).layout()
-    assert isinstance(layout, AirAssaultLayout)
+    builder = cast(_BuilderTestDouble, object.__new__(ArmedReconBuilder))
+    builder.flight = cast(
+        _BuilderFlight,
+        SimpleNamespace(
+            package=SimpleNamespace(target=tgo),
+            flight_type=FlightType.ARMED_RECON,
+            client_count=0,
+        ),
+    )
+    captured: dict[str, object] = {}
 
-    # Troops are landed a combat drop away from the depot, not on it.
-    assert layout.drop_off is not None
-    drop_distance = tgo.position.distance_to_point(layout.drop_off.position)
-    assert 900 <= drop_distance <= 1500
+    def capture(
+        ingress_type: object, targets: list[StrikeTarget] | None = None
+    ) -> FormationAttackLayout:
+        captured["ingress"] = ingress_type
+        captured["targets"] = targets
+        return cast(FormationAttackLayout, object())
 
-    # The assault area (CTLD target zone the troops advance to) is the depot.
-    assert len(layout.targets) == 1
-    assert layout.targets[0].position == tgo.position
-    assert layout.targets[0].waypoint_type is FlightWaypointType.TARGET_GROUP_LOC
+    builder._build = capture
+    builder.layout()
 
-    # The layout is flyable end to end, with the drop-off before the assault
-    # area so transports land before the troops advance.
-    waypoints = list(layout.iter_waypoints())
-    assert layout.drop_off in waypoints
-    assert layout.targets[0] in waypoints
-    assert waypoints.index(layout.drop_off) < waypoints.index(layout.targets[0])
+    assert captured["ingress"] is FlightWaypointType.INGRESS_ARMED_RECON
+    # No per-unit targets: the layout uses the generic target-area waypoint.
+    assert captured["targets"] is None

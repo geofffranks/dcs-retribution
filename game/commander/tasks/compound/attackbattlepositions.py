@@ -13,7 +13,7 @@ class AttackBattlePositions(CompoundTask[TheaterState]):
             for battle_position in battle_positions.in_priority_order:
                 yield [PlanBai(battle_position)]
         for motorpool in state.motorpool_targets:
-            # Air assault inserts troops to destroy the parked reserve. Applying
+            # Armed recon engages the parked reserve from the air. Applying
             # the effect removes the target from motorpool_targets, so at most
             # one package is planned against a given motorpool per turn.
             yield [PlanMotorpoolAttack(motorpool)]

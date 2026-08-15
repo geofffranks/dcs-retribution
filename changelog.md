@@ -25,7 +25,7 @@
 * **[Campaigns]** Ability to define motor pool objects which spawn reserve armor
 * **[Campaigns]** Motorpool placement is Garage_A-anchored and empty reserve pools are excluded from attack planning; updated placement measurements are documented.
 * **[Map]** Strategic motorpool markers show parked reserve inventory separately from ground units in transit.
-* **[Autoplanner]** Enemy motorpool depots are now attacked via air assault packages (troops destroy the parked reserve) instead of BAI/STRIKE; motorpool-specific BAI and Strike flight-planning changes were reverted in favor of the generic paths.
+* **[Autoplanner]** Enemy motorpool depots are now attacked via armed recon packages (the aircraft engage the parked reserve in the target area) instead of BAI/STRIKE; motorpool-specific BAI and Strike flight-planning changes were reverted in favor of the generic paths.
 * **[UX]** Add the ability to filter campaigns by version, map, and performance
 * **[Engine]** Bump campaign version to 10.9 for motorpool support
 * **[Modding]** Update UH-60L mod to v2.1.5 including MH-60L DAP

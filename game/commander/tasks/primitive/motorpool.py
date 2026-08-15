@@ -10,15 +10,15 @@ from game.theater.theatergroundobject import MotorpoolGroundObject
 
 @dataclass
 class PlanMotorpoolAttack(PackagePlanningTask[MotorpoolGroundObject]):
-    """Plans an air assault package (with escorts) against an enemy motorpool
-    depot, inserting troops to destroy parked reserve armor so the owner must
-    repurchase it.
+    """Plans an armed recon package (with escorts) against an enemy motorpool
+    depot, destroying parked reserve armor so the owner must repurchase it.
 
-    Air assault needs no motorpool-specific flight planning: the transport
-    inserts CTLD troops (AT teams among them) near the depot and the debrief
-    attributes the killed vehicles to the motorpool regardless of what killed
-    them. Requires transport-capable squadrons and the CTLD plugin; when none
-    are available no package forms and the motorpool goes unattacked this turn.
+    Armed recon needs no motorpool-specific flight planning: the builder plans
+    any MissionTarget via the generic target-area flyover waypoint, and the
+    ingress's EngageTargetsInZone (all ground units around the depot) makes
+    the AI attack the parked vehicles. Kill attribution is by unit regardless
+    of shooter. Any CAS-capable squadron can fly it; when none are available
+    no package forms and the motorpool goes unattacked this turn.
 
     Motorpool groups are a reconciled persisted cache (see MotorpoolPopulator).
     The non-empty gate uses this location's rendered ``alive_unit_count``.
@@ -38,7 +38,7 @@ class PlanMotorpoolAttack(PackagePlanningTask[MotorpoolGroundObject]):
         super().apply_effects(state)
 
     def propose_flights(self) -> None:
-        self.propose_flight(FlightType.AIR_ASSAULT, self.get_flight_size())
+        self.propose_flight(FlightType.ARMED_RECON, self.get_flight_size())
         self.propose_common_escorts()
 
     def _rendered_unit_count(self) -> int:

@@ -714,8 +714,12 @@ class MotorpoolGroundObject(TheaterGroundObject):
         from game.ato import FlightType
 
         if not self.is_friendly(for_player):
-            yield FlightType.AIR_ASSAULT
-        yield from super().mission_types(for_player)
+            # Yielded first so the preferred motorpool attack type leads the
+            # list; MissionTarget also offers it, so skip the duplicate below.
+            yield FlightType.ARMED_RECON
+        for mission_type in super().mission_types(for_player):
+            if mission_type is not FlightType.ARMED_RECON:
+                yield mission_type
 
     @property
     def sidc_status(self) -> Status:
