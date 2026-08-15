@@ -28,6 +28,7 @@
 * **[Autoplanner]** Enemy motorpool depots are now attacked via air assault packages (troops destroy the parked reserve) instead of BAI/STRIKE; motorpool-specific BAI and Strike flight-planning changes were reverted in favor of the generic paths.
 * **[UX]** Add the ability to filter campaigns by version, map, and performance
 * **[Engine]** Bump campaign version to 10.9 for motorpool support
+* **[Modding]** Update UH-60L mod to v2.1.5 including MH-60L DAP
 
 ## Fixes
 * **[Mission Generator]** Dynamically allocated TACAN channels no longer collide with map beacons: DME/VOR-DME beacons (which share TACAN's channelization) are now blacklisted alongside TACAN/VORTAC, and beacons whose DCS data omits a channel (e.g. Syria's KALDE "KAD" VOR-DME) have their channel/band derived from the beacon's VHF frequency per the ICAO VOR/TACAN channelling plan instead of being silently skipped. The "Assign TACAN" dialog now warns in real time when the selected channel/band is already in use by a map beacon or another carrier/airfield/flight. (#36)
