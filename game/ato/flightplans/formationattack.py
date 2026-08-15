@@ -11,6 +11,7 @@ from dcs import Point
 
 from game.flightplan import HoldZoneGeometry
 from game.theater import MissionTarget
+from game.theater.theatergroundobject import MotorpoolGroundObject
 from game.utils import nautical_miles, Speed, feet
 from .flightplan import FlightPlan
 from .formation import FormationFlightPlan, FormationLayout
@@ -178,12 +179,18 @@ class FormationAttackBuilder(IBuilder[FlightPlanT, LayoutT], ABC):
         builder = WaypointBuilder(self.flight, targets)
 
         target_waypoints: list[FlightWaypoint] = []
-        if targets:
+        if targets and not isinstance(
+            self.flight.package.target, MotorpoolGroundObject
+        ):
             for target in targets:
                 target_waypoints.append(
                     self.target_waypoint(self.flight, builder, target)
                 )
         else:
+            # Motorpools are engaged as one target area rather than per-unit
+            # target waypoints. AI attack tasks are unaffected: BAI builds its
+            # AttackGroup tasks from the target's groups at mission-gen, and
+            # strike bombing tasks ride the ingress waypoint's target list.
             target_waypoints.append(
                 self.target_area_waypoint(
                     self.flight, self.flight.package.target, builder

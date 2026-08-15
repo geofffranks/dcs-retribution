@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Callable, Protocol, cast
+from typing import Any, TYPE_CHECKING, Callable, Protocol, cast
 from unittest.mock import MagicMock, patch
 
 from dcs.mapping import Point
@@ -30,7 +30,10 @@ from game.dcs.groundunittype import GroundUnitType
 from game.theater.controlpoint import ControlPoint
 from game.theater.player import Player
 from game.theater.presetlocation import PresetLocation
-from game.theater.theatergroundobject import MotorpoolGroundObject
+from game.theater.theatergroundobject import (
+    MotorpoolGroundObject,
+    VehicleGroupGroundObject,
+)
 from game.utils import Heading, feet
 
 if TYPE_CHECKING:
@@ -193,13 +196,27 @@ def _capture_builder_targets(
     return captured
 
 
-def test_motorpool_layouts_have_no_targets_when_reserve_is_empty() -> None:
+def test_motorpool_layouts_when_reserve_is_empty() -> None:
     tgo = _populated_motorpool({_gut(): 0})
 
-    # Upstream semantics: with no rendered groups the builders pass an empty
-    # target list, so the layout falls back to a single target-area waypoint.
-    assert _capture_builder_targets(BaiBuilder, tgo) == []
+    # BAI always treats a motorpool as a single zone target (convoy-style),
+    # even when nothing is parked; STRIKE keeps the upstream empty-list
+    # semantics (single target-area waypoint, no per-unit targets).
+    bai_targets = _capture_builder_targets(BaiBuilder, tgo)
+    assert len(bai_targets) == 1
+    assert bai_targets[0].target is tgo
     assert _capture_builder_targets(StrikeBuilder, tgo) == []
+
+
+def test_motorpool_bai_layout_targets_the_motorpool_once() -> None:
+    abrams = _gut()
+    bradley = next(GroundUnitType.for_dcs_type(Armor.M_2_Bradley))
+    tgo = _populated_motorpool({abrams: 2, bradley: 1})
+
+    # One zone target for the whole motorpool, not one per vehicle-type group.
+    targets = _capture_builder_targets(BaiBuilder, tgo)
+    assert len(targets) == 1
+    assert targets[0].target is tgo
 
 
 def _build_motorpool_ingress_builder(
@@ -315,13 +332,15 @@ def test_motorpool_targets_sorted_nearest_first() -> None:
 # --- MotorpoolGroundObject.mission_types --------------------------------------
 
 
-def test_motorpool_mission_types_offer_armed_recon_not_bai() -> None:
+def test_motorpool_mission_types_offer_armed_recon_and_bai() -> None:
     tgo, _ = _motorpool_cp({_gut(): 2}, friendly=False)
     mission_types = list(tgo.mission_types(Player.BLUE))
-    assert FlightType.ARMED_RECON in mission_types
-    assert FlightType.BAI not in mission_types
-    # STRIKE remains available through the inherited generic TGO path.
+    # Armed recon leads (the autoplanned attack type); BAI is offered for
+    # manual planning; STRIKE remains available through the inherited path.
+    assert mission_types[0] is FlightType.ARMED_RECON
+    assert FlightType.BAI in mission_types
     assert FlightType.STRIKE in mission_types
+    assert len(mission_types) == len(set(mission_types))
 
 
 def test_friendly_motorpool_offers_no_attack_mission_types() -> None:
@@ -482,6 +501,83 @@ def test_plan_next_action_omits_empty_motorpool_proposals() -> None:
         battle_position,
         recon_target,
     ]
+
+
+# --- FormationAttackBuilder routes motorpool targets to the area waypoint -----
+
+
+def _build_with_real_build(
+    target: object, targets: list[StrikeTarget]
+) -> tuple[Any, Any]:
+    """Run the real FormationAttackBuilder._build with stub collaborators.
+
+    Returns (layout, waypoint_builder_double) so tests can assert which
+    target-waypoint methods the builder chose.
+    """
+    builder: Any = object.__new__(BaiBuilder)
+    position = Point(-20000.0, 0.0, MagicMock(spec=Terrain))
+    builder.flight = SimpleNamespace(
+        is_helo=True,
+        is_hercules=False,
+        flight_type=FlightType.BAI,
+        client_count=0,
+        coalition=SimpleNamespace(
+            air_wing=SimpleNamespace(can_auto_plan=MagicMock(return_value=False))
+        ),
+        package=SimpleNamespace(
+            target=target,
+            primary_flight=SimpleNamespace(
+                is_helo=True, arrival=SimpleNamespace(position=position)
+            ),
+            waypoints=SimpleNamespace(join=position, ingress=position, split=position),
+        ),
+        departure=SimpleNamespace(position=position),
+        arrival=SimpleNamespace(position=position),
+        divert=None,
+    )
+
+    with patch("game.ato.flightplans.formationattack.WaypointBuilder") as wb:
+        waypoint_builder = wb.return_value
+        waypoint_builder.strike_area = MagicMock(
+            return_value=SimpleNamespace(name="AREA")
+        )
+        waypoint_builder.bai_group = MagicMock(
+            return_value=SimpleNamespace(name="TARGET_POINT")
+        )
+        layout = builder._build(FlightWaypointType.INGRESS_BAI, targets)
+    return layout, waypoint_builder
+
+
+def test_motorpool_target_uses_area_waypoint_despite_unit_targets() -> None:
+    tgo = _populated_motorpool({_gut(): 2})
+    targets = [StrikeTarget("zone", tgo)]
+
+    layout, waypoint_builder = _build_with_real_build(tgo, targets)
+
+    # The motorpool `or` in FormationAttackBuilder._build routes to the single
+    # target-area waypoint even though a non-empty target list was passed.
+    assert [waypoint.name for waypoint in layout.targets] == ["AREA"]
+    waypoint_builder.strike_area.assert_called_once()
+    waypoint_builder.bai_group.assert_not_called()
+
+
+def test_non_motorpool_target_keeps_per_target_waypoints() -> None:
+    cp = MagicMock(spec=ControlPoint)
+    cp.captured = Player.RED
+    loc = PresetLocation(
+        "V", Point(0.0, 0.0, MagicMock(spec=Terrain)), Heading.from_degrees(0.0)
+    )
+    vehicle_group = VehicleGroupGroundObject(
+        "Vehicles", loc, cp, GroupTask.BASE_DEFENSE
+    )
+    targets = [StrikeTarget("group", vehicle_group)]
+
+    layout, waypoint_builder = _build_with_real_build(vehicle_group, targets)
+
+    # Non-motorpool targets keep the upstream per-target waypoint behavior.
+    assert [waypoint.name for waypoint in layout.targets] == ["TARGET_POINT"]
+    waypoint_builder.strike_area.assert_not_called()
+    waypoint_builder.bai_group.assert_called_once()
 
 
 # --- Armed recon needs no motorpool-specific planning --------------------------

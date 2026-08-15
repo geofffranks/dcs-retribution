@@ -714,9 +714,11 @@ class MotorpoolGroundObject(TheaterGroundObject):
         from game.ato import FlightType
 
         if not self.is_friendly(for_player):
-            # Yielded first so the preferred motorpool attack type leads the
-            # list; MissionTarget also offers it, so skip the duplicate below.
+            # Armed recon is the doctrinal attack type (and what the
+            # autoplanner proposes); BAI is offered for manual planning.
+            # MissionTarget also offers armed recon, so skip the duplicate.
             yield FlightType.ARMED_RECON
+            yield FlightType.BAI
         for mission_type in super().mission_types(for_player):
             if mission_type is not FlightType.ARMED_RECON:
                 yield mission_type

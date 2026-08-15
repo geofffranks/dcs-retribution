@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from typing import Type
 
-from game.theater.theatergroundobject import TheaterGroundObject
+from game.theater.theatergroundobject import (
+    MotorpoolGroundObject,
+    TheaterGroundObject,
+)
 from .formationattack import (
     FormationAttackBuilder,
     FormationAttackFlightPlan,
@@ -27,11 +30,19 @@ class Builder(FormationAttackBuilder[BaiFlightPlan, FormationAttackLayout]):
 
         targets: list[StrikeTarget] = []
         if isinstance(location, TheaterGroundObject):
-            for group in location.groups:
-                if group.units:
-                    targets.append(
-                        StrikeTarget(f"{group.group_name} at {location.name}", group)
-                    )
+            if isinstance(location, MotorpoolGroundObject):
+                # Motorpools are attacked as a single zone target rather than
+                # per-group targets. The AI's AttackGroup tasks are built from
+                # the target's groups at mission-gen (see BaiIngressBuilder).
+                targets.append(StrikeTarget(location.name, location))
+            else:
+                for group in location.groups:
+                    if group.units:
+                        targets.append(
+                            StrikeTarget(
+                                f"{group.group_name} at {location.name}", group
+                            )
+                        )
         elif isinstance(location, Convoy):
             targets.append(StrikeTarget(location.name, location))
         else:
