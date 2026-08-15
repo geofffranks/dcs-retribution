@@ -515,6 +515,9 @@ def _build_with_real_build(
     target-waypoint methods the builder chose.
     """
     builder: Any = object.__new__(BaiBuilder)
+    # is_helo=True deliberately bypasses _hold_point (HoldZoneGeometry) and
+    # refuel planning; is_helo never interacts with the target-waypoint
+    # branch under test, so this keeps the double minimal.
     position = Point(-20000.0, 0.0, MagicMock(spec=Terrain))
     builder.flight = SimpleNamespace(
         is_helo=True,
