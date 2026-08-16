@@ -20,6 +20,9 @@ from game.commander.tasks.primitive.armedrecon import PlanArmedRecon
 from game.commander.tasks.primitive.bai import PlanBai
 from game.commander.tasks.primitive.motorpool import PlanMotorpoolAttack
 from game.ato.flightplans.armedrecon import Builder as ArmedReconBuilder
+from game.missiongenerator.aircraft.waypoints.armedreconingress import (
+    ArmedReconIngressBuilder,
+)
 from game.ato.flightplans.bai import Builder as BaiBuilder
 from game.ato.flightplans.formationattack import FormationAttackLayout
 from game.ato.flightplans.strike import Builder as StrikeBuilder
@@ -161,12 +164,12 @@ def test_plan_missions_populates_motorpools_before_building_state() -> None:
 
 
 def _populated_motorpool(
-    reserve: dict[GroundUnitType, int],
+    reserve: dict[GroundUnitType, int], cap: int = 10
 ) -> MotorpoolGroundObject:
     tgo, cp = _motorpool_cp(reserve, friendly=False)
-    game = cast(_PopulationGame, _game([cp]))
-    game.next_group_id = MagicMock(side_effect=[1, 2, 3])
-    game.next_unit_id = MagicMock(side_effect=range(1, 20))
+    game = cast(_PopulationGame, _game([cp], cap=cap))
+    game.next_group_id = MagicMock(side_effect=range(1, 100))
+    game.next_unit_id = MagicMock(side_effect=range(1, 100))
     MotorpoolPopulator(cast("Game", game)).populate()
     return tgo
 
@@ -507,7 +510,9 @@ def test_plan_next_action_omits_empty_motorpool_proposals() -> None:
 
 
 def _build_with_real_build(
-    target: object, targets: list[StrikeTarget]
+    target: object,
+    targets: list[StrikeTarget],
+    flight_type: FlightType = FlightType.BAI,
 ) -> tuple[Any, Any]:
     """Run the real FormationAttackBuilder._build with stub collaborators.
 
@@ -522,7 +527,7 @@ def _build_with_real_build(
     builder.flight = SimpleNamespace(
         is_helo=True,
         is_hercules=False,
-        flight_type=FlightType.BAI,
+        flight_type=flight_type,
         client_count=0,
         coalition=SimpleNamespace(
             air_wing=SimpleNamespace(can_auto_plan=MagicMock(return_value=False))
@@ -564,6 +569,87 @@ def test_motorpool_target_uses_area_waypoint_despite_unit_targets() -> None:
     waypoint_builder.bai_group.assert_not_called()
 
 
+def test_motorpool_strike_target_uses_per_unit_waypoints() -> None:
+    tgo = _populated_motorpool({_gut(): 2})
+    targets = [
+        StrikeTarget(f"unit {idx}", unit) for idx, unit in enumerate(tgo.strike_targets)
+    ]
+
+    builder: Any = object.__new__(StrikeBuilder)
+    position = Point(-20000.0, 0.0, MagicMock(spec=Terrain))
+    builder.flight = SimpleNamespace(
+        is_helo=True,
+        is_hercules=False,
+        flight_type=FlightType.STRIKE,
+        client_count=0,
+        coalition=SimpleNamespace(
+            air_wing=SimpleNamespace(can_auto_plan=MagicMock(return_value=False))
+        ),
+        package=SimpleNamespace(
+            target=tgo,
+            primary_flight=SimpleNamespace(
+                is_helo=True, arrival=SimpleNamespace(position=position)
+            ),
+            waypoints=SimpleNamespace(join=position, ingress=position, split=position),
+        ),
+        departure=SimpleNamespace(position=position),
+        arrival=SimpleNamespace(position=position),
+        divert=None,
+    )
+
+    with patch("game.ato.flightplans.formationattack.WaypointBuilder") as wb:
+        waypoint_builder = wb.return_value
+        waypoint_builder.strike_area = MagicMock(
+            return_value=SimpleNamespace(name="AREA")
+        )
+        waypoint_builder.strike_point = MagicMock(
+            side_effect=lambda target: SimpleNamespace(name=target.name)
+        )
+        layout = builder._build(FlightWaypointType.INGRESS_STRIKE, targets)
+
+    assert [waypoint.name for waypoint in layout.targets] == [
+        "unit 0",
+        "unit 1",
+    ]
+    assert waypoint_builder.strike_point.call_count == len(targets)
+    waypoint_builder.strike_area.assert_not_called()
+
+
+def test_empty_motorpool_strike_has_no_target_waypoints() -> None:
+    tgo = _populated_motorpool({_gut(): 0})
+    builder: Any = object.__new__(StrikeBuilder)
+    position = Point(-20000.0, 0.0, MagicMock(spec=Terrain))
+    builder.flight = SimpleNamespace(
+        is_helo=True,
+        is_hercules=False,
+        flight_type=FlightType.STRIKE,
+        client_count=0,
+        coalition=SimpleNamespace(
+            air_wing=SimpleNamespace(can_auto_plan=MagicMock(return_value=False))
+        ),
+        package=SimpleNamespace(
+            target=tgo,
+            primary_flight=SimpleNamespace(
+                is_helo=True, arrival=SimpleNamespace(position=position)
+            ),
+            waypoints=SimpleNamespace(join=position, ingress=position, split=position),
+        ),
+        departure=SimpleNamespace(position=position),
+        arrival=SimpleNamespace(position=position),
+        divert=None,
+    )
+
+    with patch("game.ato.flightplans.formationattack.WaypointBuilder") as wb:
+        waypoint_builder = wb.return_value
+        waypoint_builder.strike_area = MagicMock(
+            return_value=SimpleNamespace(name="AREA")
+        )
+        layout = builder._build(FlightWaypointType.INGRESS_STRIKE, [])
+
+    assert layout.targets == []
+    waypoint_builder.strike_area.assert_not_called()
+
+
 def test_non_motorpool_target_keeps_per_target_waypoints() -> None:
     cp = MagicMock(spec=ControlPoint)
     cp.captured = Player.RED
@@ -583,7 +669,55 @@ def test_non_motorpool_target_keeps_per_target_waypoints() -> None:
     waypoint_builder.bai_group.assert_called_once()
 
 
-# --- Armed recon needs no motorpool-specific planning --------------------------
+# --- Armed recon motorpool radius ----------------------------------------------
+
+
+def test_armed_recon_motorpool_radius_covers_full_rendered_grid() -> None:
+    tgo = _populated_motorpool({_gut(): 25}, cap=25)
+    flight = SimpleNamespace(
+        flight_plan=SimpleNamespace(
+            tot_waypoint=SimpleNamespace(position=tgo.position)
+        ),
+        coalition=SimpleNamespace(
+            game=SimpleNamespace(
+                settings=SimpleNamespace(armed_recon_engagement_range_distance=5)
+            )
+        ),
+        package=SimpleNamespace(target=tgo),
+    )
+    builder = cast(Any, object.__new__(ArmedReconIngressBuilder))
+    builder.flight = flight
+    builder.register_special_ingress_points = MagicMock()
+    waypoint: Any = SimpleNamespace(tasks=[])
+    waypoint.add_task = lambda task: waypoint.tasks.append(task)
+
+    builder.add_tasks(waypoint)
+
+    engage = waypoint.tasks[-1]
+    assert engage.params["task"]["params"]["zoneRadius"] == 106
+
+
+def test_armed_recon_non_motorpool_radius_uses_configured_range() -> None:
+    target = SimpleNamespace(position=Point(0.0, 0.0, MagicMock(spec=Terrain)))
+    flight = SimpleNamespace(
+        flight_plan=SimpleNamespace(tot_waypoint=target),
+        coalition=SimpleNamespace(
+            game=SimpleNamespace(
+                settings=SimpleNamespace(armed_recon_engagement_range_distance=5)
+            )
+        ),
+        package=SimpleNamespace(target=target),
+    )
+    builder = cast(Any, object.__new__(ArmedReconIngressBuilder))
+    builder.flight = flight
+    builder.register_special_ingress_points = MagicMock()
+    waypoint: Any = SimpleNamespace(tasks=[])
+    waypoint.add_task = lambda task: waypoint.tasks.append(task)
+
+    builder.add_tasks(waypoint)
+
+    engage = waypoint.tasks[-1]
+    assert engage.params["task"]["params"]["zoneRadius"] == int(5 * 1852)
 
 
 def test_armed_recon_builder_accepts_motorpool_target() -> None:
