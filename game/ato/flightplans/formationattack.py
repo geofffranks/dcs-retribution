@@ -179,18 +179,22 @@ class FormationAttackBuilder(IBuilder[FlightPlanT, LayoutT], ABC):
         builder = WaypointBuilder(self.flight, targets)
 
         target_waypoints: list[FlightWaypoint] = []
-        if targets and not isinstance(
-            self.flight.package.target, MotorpoolGroundObject
-        ):
+        is_motorpool = isinstance(self.flight.package.target, MotorpoolGroundObject)
+        if self.flight.flight_type == FlightType.STRIKE and is_motorpool:
+            # Manual STRIKE receives one player-facing waypoint per live unit;
+            # an empty motorpool therefore has no target waypoints.
+            for target in targets or []:
+                target_waypoints.append(
+                    self.target_waypoint(self.flight, builder, target)
+                )
+        elif targets and not is_motorpool:
             for target in targets:
                 target_waypoints.append(
                     self.target_waypoint(self.flight, builder, target)
                 )
         else:
-            # Motorpools are engaged as one target area rather than per-unit
-            # target waypoints. AI attack tasks are unaffected: BAI builds its
-            # AttackGroup tasks from the target's groups at mission-gen, and
-            # strike bombing tasks ride the ingress waypoint's target list.
+            # Motorpools remain one target area for Armed Recon and BAI, while
+            # targetless area-based missions retain their existing fallback.
             target_waypoints.append(
                 self.target_area_waypoint(
                     self.flight, self.flight.package.target, builder
