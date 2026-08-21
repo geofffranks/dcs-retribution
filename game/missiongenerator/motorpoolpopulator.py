@@ -8,6 +8,7 @@ from uuid import UUID
 
 from game.dcs.groundunittype import GroundUnitType
 from game.ground_forces.ai_ground_planner import reserve_armor_for
+from game.theater.controlpoint import ControlPoint, ControlPointType
 from game.theater.theatergroup import TheaterGroup, TheaterUnit
 from game.theater.theatergroundobject import MotorpoolGroundObject
 from game.point_with_heading import PointWithHeading
@@ -68,7 +69,58 @@ class MotorpoolPopulator:
         self.game = game
 
     def populate(self) -> None:
+        self._rehome_motorpools()
         self.populate_control_points(self.game.theater.controlpoints)
+
+    def _rehome_motorpools(self) -> None:
+        """Attach each motorpool to its nearest eligible land control point.
+
+        Motorpool ownership is persisted as which control point's
+        ``connected_objectives`` the TGO lives in, so an existing save can park a
+        motorpool under the wrong (possibly enemy) base and nothing re-decides it.
+        FARPs/FOBs are themselves land control points with their own separate
+        ground inventory, so a motorpool parked at a FARP belongs to that FARP --
+        not to a far-away base whose influence zone happens to contain the point.
+
+        Because this runs on every ``populate`` (save load via the migrator, turn
+        start, and mission generation), an existing save converts on load, and the
+        pool changes hands when the nearest eligible control point is captured.
+        Naval and off-map control points never own motorpools.
+        """
+        control_points = self.game.theater.controlpoints
+        # Only control points that expose a concrete position and control-point
+        # type can be motorpool owners. Real control points always do; the guard
+        # also lets the pass run over lightly-constructed test doubles without
+        # crashing.
+        eligible: list[ControlPoint] = []
+        for cp in control_points:
+            if getattr(cp, "cptype", None) in (
+                ControlPointType.AIRCRAFT_CARRIER_GROUP,
+                ControlPointType.LHA_GROUP,
+                ControlPointType.OFF_MAP,
+            ):
+                continue
+            if getattr(cp, "position", None) is None:
+                continue
+            eligible.append(cp)
+        if not eligible:
+            return
+        for owner in control_points:
+            objectives = getattr(owner, "connected_objectives", None)
+            if objectives is None:
+                continue
+            for tgo in list(objectives):
+                if not isinstance(tgo, MotorpoolGroundObject):
+                    continue
+                closest = min(
+                    eligible,
+                    key=lambda cp: cp.position.distance_to_point(tgo.position),
+                )
+                if closest is owner:
+                    continue
+                owner.connected_objectives.remove(tgo)
+                closest.connected_objectives.append(tgo)
+                tgo.control_point = closest
 
     def populate_control_points(self, control_points: Iterable[ControlPoint]) -> None:
         cap: int = self.game.settings.motorpool_spawn_cap
