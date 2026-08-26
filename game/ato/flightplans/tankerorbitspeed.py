@@ -57,7 +57,7 @@ def select_tanker_orbit_speed(
     Precedence:
 
     1. Manual mode (``props[TANKER_ORBIT_SPEED_MODE_PROP] == "manual"``) with a
-       valid ``props[TANKER_ORBIT_SPEED_KIAS_PROP]`` (250-350 KIAS inclusive)
+       valid ``props[TANKER_ORBIT_SPEED_KIAS_PROP]`` (220-350 KIAS inclusive)
        always wins, even when receiver metadata is present.
     2. Invalid or missing manual speed falls back directly to `baseline` so
        malformed manual properties cannot select a receiver-specific speed.

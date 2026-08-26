@@ -69,8 +69,12 @@ def test_manual_mode_persists_valid_speed_and_enforces_bounds(
         TANKER_ORBIT_SPEED_MODE_PROP: "manual",
         TANKER_ORBIT_SPEED_KIAS_PROP: 350,
     }
-    widget.speed.setValue(249)
-    assert model.props[TANKER_ORBIT_SPEED_KIAS_PROP] == 250
+    widget.speed.setValue(180)
+    assert widget.speed.value() == 220
+    assert model.props[TANKER_ORBIT_SPEED_KIAS_PROP] == 220
+    widget.speed.setValue(400)
+    assert widget.speed.value() == 350
+    assert model.props[TANKER_ORBIT_SPEED_KIAS_PROP] == 350
 
 
 def test_existing_manual_props_are_loaded(app: QApplication) -> None:
