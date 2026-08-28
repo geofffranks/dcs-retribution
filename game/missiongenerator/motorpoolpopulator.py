@@ -69,7 +69,6 @@ class MotorpoolPopulator:
         self.game = game
 
     def populate(self) -> None:
-        self._rehome_motorpools()
         self.populate_control_points(self.game.theater.controlpoints)
 
     def _rehome_motorpools(self) -> None:

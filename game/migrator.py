@@ -57,7 +57,9 @@ class Migrator:
 
         from game.missiongenerator.motorpoolpopulator import MotorpoolPopulator
 
-        MotorpoolPopulator(self.game).populate()
+        populator = MotorpoolPopulator(self.game)
+        populator._rehome_motorpools()
+        populator.populate()
 
     def _update_doctrine(self) -> None:
         doctrines = [
