@@ -41,7 +41,7 @@ def _make_pending(player: Player) -> PendingTransfers:
     """A PendingTransfers with arrange_transport stubbed out."""
     game = SimpleNamespace(transit_network_for=lambda _p: object())
     pending = PendingTransfers(cast(Any, game), player)
-    cast(Any, pending).arrange_transport = lambda _transfer, _now: None
+    cast(Any, pending).arrange_transport = lambda _transfer, _now, _events: None
     return pending
 
 
@@ -102,7 +102,7 @@ def test_new_transfer_invariant_checks_player_match() -> None:
     transfer = TransferOrder(origin, destination, {}, player=Player.RED)
 
     with pytest.raises(AssertionError):
-        pending.new_transfer(transfer, datetime.now())
+        pending.new_transfer(transfer, datetime.now(), GameUpdateEvents())
 
 
 def test_split_transfer_preserves_owner() -> None:
@@ -127,14 +127,16 @@ def test_ground_unit_orders_create_transfer_passes_coalition_player() -> None:
 
     captured_transfers: list[TransferOrder] = []
     fake_transfers = SimpleNamespace(
-        new_transfer=lambda t, _now: captured_transfers.append(t)
+        new_transfer=lambda t, _now, _events: captured_transfers.append(t)
     )
     coalition = SimpleNamespace(player=Player.RED, transfers=fake_transfers)
 
     from game.groundunitorders import GroundUnitOrders
 
     orders = GroundUnitOrders(destination)
-    orders.create_transfer(cast(Any, coalition), origin, {unit: 1}, datetime.now())
+    orders.create_transfer(
+        cast(Any, coalition), origin, {unit: 1}, datetime.now(), GameUpdateEvents()
+    )
 
     assert len(captured_transfers) == 1
     assert captured_transfers[0].player is Player.RED
@@ -153,7 +155,9 @@ def test_create_transfer_passes_authorized_origin_owner() -> None:
             coalition_for=lambda player: SimpleNamespace(transfers=blue_transfers)
         ),
         transfer_model=SimpleNamespace(
-            new_transfer=lambda t, _now: blue_transfers.new_transfer(t, _now)
+            new_transfer=lambda t, _now: blue_transfers.new_transfer(
+                t, _now, GameUpdateEvents()
+            )
         ),
     )
 
@@ -275,8 +279,8 @@ def test_ai_red_logistics_still_functions_with_cheat_disabled() -> None:
     transfer = TransferOrder(origin, destination, {unit: 2}, player=Player.RED)
 
     # This must work even though enable_enemy_buy_sell is False for the UI.
-    red_transfers.new_transfer(transfer, datetime.now())
+    red_transfers.new_transfer(transfer, datetime.now(), GameUpdateEvents())
     assert red_transfers.pending_transfers[0] is transfer
 
-    red_transfers.cancel_transfer(transfer)
+    red_transfers.cancel_transfer(transfer, GameUpdateEvents())
     assert red_transfers.pending_transfers == []

@@ -20,6 +20,7 @@ from game.theater import Player
 if TYPE_CHECKING:
     from game import Game
     from game.sim import GameUpdateEvents
+    from game.theater import ControlPoint
 
 
 class GameUpdateEventsJs(BaseModel):
@@ -61,6 +62,23 @@ class GameUpdateEventsJs(BaseModel):
         updated_supply_routes = []
         updated_front_lines = []
         if game is not None:
+            from game.missiongenerator.motorpoolpopulator import MotorpoolPopulator
+            from game.theater.theatergroundobject import MotorpoolGroundObject
+
+            affected_control_points: list[ControlPoint] = []
+            for tgo in events.updated_tgos:
+                if not isinstance(tgo, MotorpoolGroundObject):
+                    continue
+                if not any(
+                    existing is tgo.control_point
+                    for existing in affected_control_points
+                ):
+                    affected_control_points.append(tgo.control_point)
+            if affected_control_points:
+                MotorpoolPopulator(game).populate_control_points(
+                    affected_control_points
+                )
+
             new_combats = [
                 FrozenCombatJs.for_combat(c, game.theater) for c in events.new_combats
             ]

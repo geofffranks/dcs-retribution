@@ -1,17 +1,26 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 from pydantic import BaseModel
 
-from game.data.groups import GroupTask
+from game.dcs.groundunittype import GroundUnitType
+from game.ground_forces.ai_ground_planner import reserve_armor_for
+from game.missiongenerator.motorpoolpopulator import _select_capped
 from game.server.leaflet import LeafletPoint
-from game.theater.theatergroundobject import ShipGroundObject
+from game.theater.theatergroundobject import MotorpoolGroundObject, ShipGroundObject
 
 if TYPE_CHECKING:
     from game import Game
     from game.theater import TheaterGroundObject
+
+
+class AggregateGroundUnitEntry(BaseModel):
+    unit_type: str
+    display_name: str
+    count: int
 
 
 class TgoJs(BaseModel):
@@ -22,16 +31,35 @@ class TgoJs(BaseModel):
     blue: bool
     position: LeafletPoint
     units: list[str]  # TODO: Event stream
+    reserve_units: list[str]
+    unrendered_reserve: list[AggregateGroundUnitEntry]
+    in_transit_units: list[AggregateGroundUnitEntry]
     threat_ranges: list[float]  # TODO: Event stream
     detection_ranges: list[float]  # TODO: Event stream
     dead: bool  # TODO: Event stream
     sidc: str  # TODO: Event stream
-    task: Optional[GroupTask]
+    task: Optional[tuple[str, str]]
     mobile: bool
     destination: Optional[LeafletPoint]
 
     class Config:
         title = "Tgo"
+
+    @staticmethod
+    def _aggregate_entries(
+        counts: dict[GroundUnitType, int],
+    ) -> list[AggregateGroundUnitEntry]:
+        return [
+            AggregateGroundUnitEntry(
+                unit_type=unit_type.variant_id,
+                display_name=unit_type.display_name,
+                count=count,
+            )
+            for unit_type, count in sorted(
+                counts.items(), key=lambda item: item[0].variant_id
+            )
+            if count > 0
+        ]
 
     @staticmethod
     def for_tgo(tgo: TheaterGroundObject) -> TgoJs:
@@ -49,6 +77,37 @@ class TgoJs(BaseModel):
             and tgo.target_position is not None
         ):
             destination = LeafletPoint.from_latlng(tgo.target_position.latlng())
+        reserve_units: list[str] = []
+        unrendered_reserve: list[AggregateGroundUnitEntry] = []
+        in_transit_units: list[AggregateGroundUnitEntry] = []
+        if isinstance(tgo, MotorpoolGroundObject):
+            reserve_units = [unit.display_name for unit in tgo.units]
+            motorpools = [
+                other
+                for other in tgo.control_point.ground_objects
+                if isinstance(other, MotorpoolGroundObject)
+            ]
+            if motorpools and motorpools[0] is tgo:
+                reserve = reserve_armor_for(tgo.control_point)
+                settings = tgo.control_point.coalition.game.settings
+                selected = (
+                    _select_capped(reserve, settings.motorpool_spawn_cap)
+                    if settings.motorpool_enabled
+                    else {}
+                )
+                unrendered_reserve = TgoJs._aggregate_entries(
+                    {
+                        unit_type: count - selected.get(unit_type, 0)
+                        for unit_type, count in reserve.items()
+                    }
+                )
+                transit: defaultdict[GroundUnitType, int] = defaultdict(int)
+                for transfer in tgo.control_point.coalition.transfers:
+                    if transfer.origin != tgo.control_point:
+                        continue
+                    for unit_type, count in transfer.units.items():
+                        transit[unit_type] += count
+                in_transit_units = TgoJs._aggregate_entries(dict(transit))
         return TgoJs(
             id=tgo.id,
             name=tgo.name,
@@ -57,11 +116,21 @@ class TgoJs(BaseModel):
             blue=blue,
             position=tgo.position.latlng(),
             units=[unit.display_name for unit in tgo.units],
+            reserve_units=reserve_units,
+            unrendered_reserve=unrendered_reserve,
+            in_transit_units=in_transit_units,
             threat_ranges=threat_ranges,
             detection_ranges=detection_ranges,
             dead=tgo.is_dead,
             sidc=str(tgo.sidc()),
-            task=tgo.groups[0].ground_object.task if tgo.groups else None,
+            task=(
+                (
+                    tgo.groups[0].ground_object.task.description,
+                    tgo.groups[0].ground_object.task.role.value,
+                )
+                if tgo.groups and tgo.groups[0].ground_object.task is not None
+                else None
+            ),
             mobile=mobile,
             destination=destination,
         )

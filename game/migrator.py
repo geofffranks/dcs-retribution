@@ -55,6 +55,10 @@ class Migrator:
         # TODO: remove in due time as this is supposedly fixed
         self.game.settings.nevatim_parking_fix = False
 
+        from game.missiongenerator.motorpoolpopulator import MotorpoolPopulator
+
+        MotorpoolPopulator(self.game).populate()
+
     def _update_doctrine(self) -> None:
         doctrines = [
             MODERN_DOCTRINE,

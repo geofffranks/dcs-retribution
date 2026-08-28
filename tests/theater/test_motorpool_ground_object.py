@@ -57,4 +57,6 @@ def test_motorpool_symbol_is_maintenance_installation() -> None:
 
 
 def test_motorpool_unit_types_starts_empty() -> None:
-    assert _motorpool().motorpool_unit_types == {}
+    motorpool = _motorpool()
+    assert motorpool.motorpool_unit_types == {}
+    assert motorpool.motorpool_projection_keys == {}

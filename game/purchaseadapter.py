@@ -140,11 +140,29 @@ class AircraftPurchaseAdapter(PurchaseAdapter[Squadron]):
 
 class GroundUnitPurchaseAdapter(PurchaseAdapter[GroundUnitType]):
     def __init__(
-        self, control_point: ControlPoint, coalition: Coalition, game: Game
+        self,
+        control_point: ControlPoint,
+        coalition: Coalition,
+        game: Game,
     ) -> None:
         super().__init__(coalition)
         self.control_point = control_point
         self.game = game
+
+    def buy(self, item: GroundUnitType, quantity: int) -> None:
+        super().buy(item, quantity)
+        self._publish_motorpool_update()
+
+    def sell(self, item: GroundUnitType, quantity: int) -> None:
+        super().sell(item, quantity)
+        self._publish_motorpool_update()
+
+    def _publish_motorpool_update(self) -> None:
+        from game.server import EventStream
+        from game.sim import GameUpdateEvents
+
+        events = GameUpdateEvents().update_motorpools_at(self.control_point)
+        EventStream.put_nowait(events)
 
     @property
     def _enemy_transaction_allowed(self) -> bool:
@@ -198,6 +216,8 @@ class GroundUnitPurchaseAdapter(PurchaseAdapter[GroundUnitType]):
         self.control_point.base.commit_losses({item: 1})
 
     def do_cancel_sale(self, item: GroundUnitType) -> None:
+        # Ground-unit sales are immediate (commit_losses); there is no
+        # pending order to cancel.
         raise TransactionError("Ground unit sales cannot be cancelled")
 
     def price_of(self, item: GroundUnitType) -> int:
