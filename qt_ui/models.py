@@ -376,9 +376,16 @@ class TransferModel(QAbstractListModel):
         super().__init__()
         self.game_model = game_model
 
+    @staticmethod
+    def owner_of(transfer: TransferOrder) -> Player:
+        return transfer.player
+
     @property
     def transfers(self) -> PendingTransfers:
         return self.game_model.game.coalition_for(player=Player.BLUE).transfers
+
+    def _transfers_for(self, player: Player) -> PendingTransfers:
+        return self.game_model.game.coalition_for(player=player).transfers
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
         return self.transfers.pending_transfer_count
@@ -405,11 +412,27 @@ class TransferModel(QAbstractListModel):
         """Returns the icon that should be displayed for the transfer."""
         return None
 
+    @staticmethod
+    def _authorized(player: Player, settings: Any) -> bool:
+        if player.is_blue:
+            return True
+        if player.is_red:
+            return bool(getattr(settings, "enable_enemy_buy_sell", False))
+        return False
+
+    def _assert_authorized(self, transfer: TransferOrder) -> None:
+        if not self._authorized(transfer.player, self.game_model.game.settings):
+            raise PermissionError(
+                f"Cannot manage {transfer.player} transfer: "
+                "OPFOR buy/sell/transfer is disabled"
+            )
+
     def new_transfer(self, transfer: TransferOrder, now: datetime) -> None:
         """Updates the game with the new unit transfer."""
+        self._assert_authorized(transfer)
         self.beginInsertRows(QModelIndex(), self.rowCount(), self.rowCount())
         # TODO: Needs to regenerate base inventory tab.
-        self.transfers.new_transfer(transfer, now)
+        self._transfers_for(self.owner_of(transfer)).new_transfer(transfer, now)
         self.endInsertRows()
 
     def cancel_transfer_at_index(self, index: QModelIndex) -> None:
@@ -418,10 +441,12 @@ class TransferModel(QAbstractListModel):
 
     def cancel_transfer(self, transfer: TransferOrder) -> None:
         """Cancels the planned unit transfer at the given index."""
-        index = self.transfers.index_of_transfer(transfer)
+        self._assert_authorized(transfer)
+        transfers = self._transfers_for(self.owner_of(transfer))
+        index = transfers.index_of_transfer(transfer)
         self.beginRemoveRows(QModelIndex(), index, index)
         # TODO: Needs to regenerate base inventory tab.
-        self.transfers.cancel_transfer(transfer)
+        transfers.cancel_transfer(transfer)
         self.endRemoveRows()
 
     def transfer_at_index(self, index: QModelIndex) -> TransferOrder:

@@ -8,6 +8,7 @@ from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
+
 from game.migrator import Migrator
 from game.theater.base import Base
 from game.theater.player import Player

@@ -58,7 +58,7 @@ class PendingTransfersList(QListView):
         index = self.indexAt(event.pos())
         if not index.isValid():
             return
-        if not self.transfer_model.transfer_at_index(index).player.is_blue:
+        if not self.can_cancel(index):
             return
 
         menu = QMenu("Menu")
@@ -114,7 +114,10 @@ class PendingTransfersDialog(QDialog):
     def can_cancel(self, index: QModelIndex) -> bool:
         if not index.isValid():
             return False
-        return self.transfer_model.transfer_at_index(index).player.is_blue
+        return self.transfer_model.transfer_at_index(index).player_owned.is_blue or (
+            self.transfer_model.game_model.game.settings.enable_enemy_buy_sell
+            and self.transfer_model.transfer_at_index(index).player_owned.is_red
+        )
 
     def on_selection_changed(
         self, selected: QItemSelection, _deselected: QItemSelection
