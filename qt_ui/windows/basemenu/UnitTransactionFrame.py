@@ -117,6 +117,9 @@ class UnitTransactionFrame(QFrame, Generic[TransactionItemType]):
         self.purchase_groups: dict[
             TransactionItemType, PurchaseGroup[TransactionItemType]
         ] = {}
+        self.game_model.transfer_model.inventory_changed.connect(
+            self.update_existing_units
+        )
         self.update_available_budget()
 
     def current_quantity_of(self, item: TransactionItemType) -> int:
@@ -236,7 +239,12 @@ class UnitTransactionFrame(QFrame, Generic[TransactionItemType]):
 
     def post_transaction_update(self) -> None:
         self.update_purchase_controls()
+        self.update_existing_units()
         self.update_available_budget()
+
+    def update_existing_units(self) -> None:
+        for item, label in self.existing_units_labels.items():
+            label.setText(str(self.current_quantity_of(item)))
 
     def buy(self, item: TransactionItemType, quantity: int) -> None:
         try:

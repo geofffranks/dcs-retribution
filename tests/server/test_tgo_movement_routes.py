@@ -1,11 +1,12 @@
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
 from dcs.mapping import Point
 from fastapi import HTTPException
 
+from game.missiongenerator.motorpoolpopulator import MotorpoolPopulator, _select_capped
 from game.server.leaflet import LeafletPoint
 from game.server.tgos.models import TgoJs
 from game.server.tgos.routes import (
@@ -13,10 +14,18 @@ from game.server.tgos.routes import (
     set_tgo_destination,
     tgo_destination_in_range,
 )
-from game.theater.controlpoint import OffMapSpawn, Player
+from game.sim import GameUpdateEvents
+from game.theater.base import Base
+from game.theater.controlpoint import ControlPoint, OffMapSpawn, Player
 from game.theater.presetlocation import PresetLocation
-from game.theater.theatergroundobject import SamGroundObject, ShipGroundObject
+from game.theater.theatergroundobject import (
+    MotorpoolGroundObject,
+    SamGroundObject,
+    ShipGroundObject,
+)
+from game.dcs.groundunittype import GroundUnitType
 from game.utils import Heading, nautical_miles
+from dcs.vehicles import Armor
 
 
 def _ship(blue: bool = True) -> ShipGroundObject:
@@ -92,6 +101,204 @@ def test_for_tgo_non_ship_not_mobile(monkeypatch: pytest.MonkeyPatch) -> None:
     cp._coalition = SimpleNamespace(player=player)  # type: ignore[assignment]
     sam = SamGroundObject(name="sam", location=location, control_point=cp, task=None)
     assert TgoJs.for_tgo(sam).mobile is False
+
+
+def _populated_motorpools(
+    reserve: dict[GroundUnitType, int], cap: int, count: int = 1
+) -> tuple[list[MotorpoolGroundObject], Any]:
+    coalition = SimpleNamespace(transfers=[])
+    cp = SimpleNamespace(
+        name="factory",
+        captured=Player.BLUE,
+        connected_points=[],
+        base=SimpleNamespace(armor=dict(reserve), total_armor=sum(reserve.values())),
+        coalition=coalition,
+    )
+    motorpools = [
+        MotorpoolGroundObject(
+            f"pool-{index}",
+            PresetLocation(
+                name=f"motorpool-{index}",
+                position=Point(index * 100, 0, None),  # type: ignore[arg-type]
+                heading=Heading(0),
+            ),
+            cp,  # type: ignore[arg-type]
+            None,
+        )
+        for index in range(count)
+    ]
+    cp.ground_objects = motorpools
+    cp.connected_objectives = motorpools
+    next_ids = {"unit": 2227, "group": 0}
+
+    def next_unit_id() -> int:
+        next_ids["unit"] += 1
+        return next_ids["unit"]
+
+    def next_group_id() -> int:
+        next_ids["group"] += 1
+        return next_ids["group"]
+
+    game = SimpleNamespace(
+        theater=SimpleNamespace(controlpoints=[cp]),
+        settings=SimpleNamespace(motorpool_enabled=True, motorpool_spawn_cap=cap),
+        next_unit_id=next_unit_id,
+        next_group_id=next_group_id,
+    )
+    coalition.game = game
+    MotorpoolPopulator(cast(Any, game)).populate()
+    return motorpools, cp
+
+
+def test_motorpool_tgo_reserve_units_match_popup_display_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_latlng(monkeypatch)
+    abrams = next(GroundUnitType.for_dcs_type(Armor.M_1_Abrams))
+    motorpools, _ = _populated_motorpools({abrams: 3}, cap=3)
+    tgo = motorpools[0]
+
+    assert TgoJs.for_tgo(tgo).reserve_units == [unit.display_name for unit in tgo.units]
+    assert TgoJs.for_tgo(tgo).reserve_units[0].startswith("2228 |")
+
+
+def test_event_serialization_reconciles_motorpool_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from game.server.eventstream.models import GameUpdateEventsJs
+
+    _patch_latlng(monkeypatch)
+    abrams = next(GroundUnitType.for_dcs_type(Armor.M_1_Abrams))
+    motorpools, cp = _populated_motorpools({abrams: 2}, cap=3)
+    tgo = motorpools[0]
+    game = cp.coalition.game
+    original_ids = [unit.id for unit in tgo.units]
+    cp.base.armor[abrams] = 3
+    cp.base.total_armor = 3
+    events = GameUpdateEvents().update_motorpools_at(cp)
+    monkeypatch.setattr(
+        "game.server.eventstream.models.UnculledZoneJs.from_game", lambda _game: []
+    )
+
+    payload = GameUpdateEventsJs.from_events(events, game)
+
+    assert len(payload.updated_tgos) == 1
+    assert len(payload.updated_tgos[0].reserve_units) == 3
+    assert [unit.id for unit in list(tgo.units)[:2]] == original_ids
+
+
+def test_same_cp_motorpool_payloads_are_disjoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_latlng(monkeypatch)
+    abrams = next(GroundUnitType.for_dcs_type(Armor.M_1_Abrams))
+    motorpools, _ = _populated_motorpools({abrams: 6}, cap=6, count=2)
+
+    payloads = [TgoJs.for_tgo(tgo).reserve_units for tgo in motorpools]
+
+    assert payloads == [[unit.display_name for unit in tgo.units] for tgo in motorpools]
+    assert set(payloads[0]).isdisjoint(payloads[1])
+
+
+def test_motorpool_aggregate_inventory_uses_primary_marker_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_latlng(monkeypatch)
+    abrams = next(GroundUnitType.for_dcs_type(Armor.M_1_Abrams))
+    bradley = next(GroundUnitType.for_dcs_type(Armor.M_2_Bradley))
+    reserve = {bradley: 4, abrams: 5}
+    cap = 4
+    motorpools, cp = _populated_motorpools(reserve, cap=cap, count=2)
+    destination = SimpleNamespace(name="destination")
+    original_origin = SimpleNamespace(name="original-origin")
+    cp.coalition.transfers = [
+        SimpleNamespace(
+            origin=cp,
+            position=destination,
+            destination=destination,
+            units={bradley: 2, abrams: 1},
+        ),
+        SimpleNamespace(
+            origin=cp,
+            position=destination,
+            destination=destination,
+            units={abrams: 2},
+        ),
+        SimpleNamespace(
+            origin=original_origin,
+            position=cp,
+            destination=destination,
+            units={bradley: 7},
+        ),
+    ]
+    selected = _select_capped(reserve, cap)
+    expected_unrendered = [
+        {
+            "unit_type": unit_type.variant_id,
+            "display_name": unit_type.display_name,
+            "count": count - selected.get(unit_type, 0),
+        }
+        for unit_type, count in sorted(
+            reserve.items(), key=lambda item: item[0].variant_id
+        )
+        if count - selected.get(unit_type, 0) > 0
+    ]
+    expected_transit = [
+        {
+            "unit_type": unit_type.variant_id,
+            "display_name": unit_type.display_name,
+            "count": count,
+        }
+        for unit_type, count in sorted(
+            ((abrams, 3), (bradley, 2)), key=lambda item: item[0].variant_id
+        )
+    ]
+
+    first, second = (TgoJs.for_tgo(tgo) for tgo in motorpools)
+
+    assert [entry.dict() for entry in first.unrendered_reserve] == expected_unrendered
+    assert [entry.dict() for entry in first.in_transit_units] == expected_transit
+    assert second.unrendered_reserve == []
+    assert second.in_transit_units == []
+
+
+def test_new_transfer_emits_motorpool_tgo_update(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from datetime import datetime
+
+    from game.transfers import PendingTransfers, TransferOrder
+
+    unit_type = next(GroundUnitType.for_dcs_type(Armor.M_1_Abrams))
+    cp = SimpleNamespace(
+        captured=Player.BLUE,
+        base=Base(),
+        ground_objects=[],
+        coalition=SimpleNamespace(transfers=[]),
+    )
+    location = PresetLocation(
+        name="motorpool",
+        position=Point(0, 0, None),  # type: ignore[arg-type]
+        heading=Heading(0),
+    )
+    tgo = MotorpoolGroundObject("pool", location, cp, None)  # type: ignore[arg-type]
+    cp.ground_objects = [tgo]
+    destination = SimpleNamespace()
+    transfer = TransferOrder(
+        cast("ControlPoint", cp),
+        cast("ControlPoint", destination),
+        {unit_type: 1},
+        player=Player.BLUE,
+    )
+    pending = PendingTransfers.__new__(PendingTransfers)
+    pending.pending_transfers = []
+    pending.player = Player.BLUE
+    cast(Any, pending).arrange_transport = lambda _transfer, _now, _events: None
+    events = GameUpdateEvents()
+
+    pending.new_transfer(transfer, datetime.now(), events)
+
+    assert events.updated_tgos == {tgo}
 
 
 def _patch_point(monkeypatch: pytest.MonkeyPatch) -> None:

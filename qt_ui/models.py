@@ -371,17 +371,61 @@ class TransferModel(QAbstractListModel):
     """The model for a ground unit transfer."""
 
     TransferRole = Qt.ItemDataRole.UserRole
+    inventory_changed = Signal()
 
     def __init__(self, game_model: GameModel) -> None:
         super().__init__()
         self.game_model = game_model
+        #: Snapshot of whether RED rows are currently visible to the model.
+        #: ``_all_transfers`` reads this rather than re-checking the live setting
+        #: on every call so that row contents never change silently; visibility
+        #: changes are applied atomically inside ``sync_game_and_visibility``.
+        self._red_visible: bool = self._compute_red_visible()
+
+    def _compute_red_visible(self) -> bool:
+        """Whether RED rows are visible given the current game state."""
+        game = self.game_model.game
+        if game is None:
+            return False
+        return bool(getattr(game.settings, "enable_enemy_buy_sell", False))
+
+    @staticmethod
+    def owner_of(transfer: TransferOrder) -> Player:
+        return transfer.player
 
     @property
     def transfers(self) -> PendingTransfers:
         return self.game_model.game.coalition_for(player=Player.BLUE).transfers
 
+    def _transfers_for(self, player: Player) -> PendingTransfers:
+        return self.game_model.game.coalition_for(player=player).transfers
+
+    def _all_transfers(self) -> list[TransferOrder]:
+        if self.game_model.game is None:
+            return []
+        transfers = list(self._transfers_for(Player.BLUE).pending_transfers)
+        if self._red_visible:
+            transfers.extend(self._transfers_for(Player.RED).pending_transfers)
+        return transfers
+
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
-        return self.transfers.pending_transfer_count
+        return len(self._all_transfers())
+
+    def sync_game_and_visibility(self) -> None:
+        """Re-snapshot RED-visibility, resetting the model if it changed.
+
+        Called from ``GameModel.set`` after game replacement, and from the
+        settings dialog after a successful settings application. When the
+        visibility snapshot changes, the snapshot is updated strictly inside
+        ``beginResetModel``/``endResetModel`` so views are notified and row
+        contents never change silently.
+        """
+        new_red_visible = self._compute_red_visible()
+        if new_red_visible == self._red_visible:
+            return
+        self.beginResetModel()
+        self._red_visible = new_red_visible
+        self.endResetModel()
 
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
         if not index.isValid():
@@ -407,10 +451,16 @@ class TransferModel(QAbstractListModel):
 
     def new_transfer(self, transfer: TransferOrder, now: datetime) -> None:
         """Updates the game with the new unit transfer."""
-        self.beginInsertRows(QModelIndex(), self.rowCount(), self.rowCount())
-        # TODO: Needs to regenerate base inventory tab.
-        self.transfers.new_transfer(transfer, now)
+        if transfer.player.is_blue:
+            insert_row = len(self._transfers_for(Player.BLUE).pending_transfers)
+        else:
+            insert_row = self.rowCount()
+        self.beginInsertRows(QModelIndex(), insert_row, insert_row)
+        events = GameUpdateEvents()
+        self._transfers_for(self.owner_of(transfer)).new_transfer(transfer, now, events)
         self.endInsertRows()
+        EventStream.put_nowait(events)
+        self.inventory_changed.emit()
 
     def cancel_transfer_at_index(self, index: QModelIndex) -> None:
         """Cancels the planned unit transfer at the given index."""
@@ -418,15 +468,18 @@ class TransferModel(QAbstractListModel):
 
     def cancel_transfer(self, transfer: TransferOrder) -> None:
         """Cancels the planned unit transfer at the given index."""
-        index = self.transfers.index_of_transfer(transfer)
+        transfers = self._transfers_for(self.owner_of(transfer))
+        index = self._all_transfers().index(transfer)
         self.beginRemoveRows(QModelIndex(), index, index)
-        # TODO: Needs to regenerate base inventory tab.
-        self.transfers.cancel_transfer(transfer)
+        events = GameUpdateEvents()
+        transfers.cancel_transfer(transfer, events)
         self.endRemoveRows()
+        EventStream.put_nowait(events)
+        self.inventory_changed.emit()
 
     def transfer_at_index(self, index: QModelIndex) -> TransferOrder:
         """Returns the transfer located at the given index."""
-        return self.transfers.transfer_at_index(index.row())
+        return self._all_transfers()[index.row()]
 
 
 class AirWingModel(QAbstractListModel):
@@ -596,6 +649,9 @@ class GameModel:
         self.game = game
         self.ato_model.replace_from_game(player=True)
         self.red_ato_model.replace_from_game(player=False)
+        # The transfer model snapshots RED-visibility; re-sync after the game
+        # object is replaced so its visible rows match the new game's settings.
+        self.transfer_model.sync_game_and_visibility()
 
     def get(self) -> Game:
         if self.game is None:

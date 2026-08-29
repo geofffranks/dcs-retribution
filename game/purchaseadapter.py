@@ -140,11 +140,29 @@ class AircraftPurchaseAdapter(PurchaseAdapter[Squadron]):
 
 class GroundUnitPurchaseAdapter(PurchaseAdapter[GroundUnitType]):
     def __init__(
-        self, control_point: ControlPoint, coalition: Coalition, game: Game
+        self,
+        control_point: ControlPoint,
+        coalition: Coalition,
+        game: Game,
     ) -> None:
         super().__init__(coalition)
         self.control_point = control_point
         self.game = game
+
+    def buy(self, item: GroundUnitType, quantity: int) -> None:
+        super().buy(item, quantity)
+        self._publish_motorpool_update()
+
+    def sell(self, item: GroundUnitType, quantity: int) -> None:
+        super().sell(item, quantity)
+        self._publish_motorpool_update()
+
+    def _publish_motorpool_update(self) -> None:
+        from game.server import EventStream
+        from game.sim import GameUpdateEvents
+
+        events = GameUpdateEvents().update_motorpools_at(self.control_point)
+        EventStream.put_nowait(events)
 
     def pending_delivery_quantity(self, item: GroundUnitType) -> int:
         return self.control_point.ground_unit_orders.pending_orders(item)
