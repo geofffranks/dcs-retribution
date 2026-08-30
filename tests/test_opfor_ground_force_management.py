@@ -7,7 +7,9 @@ from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtCore import QPoint
+from PySide6.QtGui import QContextMenuEvent
+from PySide6.QtWidgets import QApplication, QLabel, QMenu
 
 from game.purchaseadapter import GroundUnitPurchaseAdapter
 from game.migrator import Migrator
@@ -16,6 +18,7 @@ from game.theater.player import Player
 from game.transfers import MultiGroupTransport, PendingTransfers, TransferOrder
 from game.theater.transitnetwork import TransitNetwork
 from qt_ui.models import TransferModel
+from qt_ui.windows.PendingTransfersDialog import PendingTransfersDialog
 from qt_ui.windows.basemenu.NewUnitTransferDialog import (
     ScrollingUnitTransferGrid,
     TransferDestinationComboBox,
@@ -132,6 +135,71 @@ def test_transfer_migration_backfills_missing_owner() -> None:
     Migrator._normalize_single_transfer_player(transfer, coalition)
 
     assert transfer.player is Player.RED
+
+
+def test_transfer_migration_backfills_legacy_boolean_owner_from_each_coalition() -> (
+    None
+):
+    blue_transfer = SimpleNamespace(player=False)
+    red_transfer = SimpleNamespace(player=True)
+    blue_pending = SimpleNamespace(pending_transfers=[blue_transfer])
+    red_pending = SimpleNamespace(pending_transfers=[red_transfer])
+    blue_transfers = SimpleNamespace(
+        pending_transfers=blue_pending.pending_transfers,
+        convoys=[],
+        cargo_ships=[],
+    )
+    red_transfers = SimpleNamespace(
+        pending_transfers=red_pending.pending_transfers,
+        convoys=[],
+        cargo_ships=[],
+    )
+    migrator = Migrator.__new__(Migrator)
+    migrator.game = cast(
+        Any,
+        SimpleNamespace(
+            coalitions=[
+                SimpleNamespace(player=Player.BLUE, transfers=blue_transfers),
+                SimpleNamespace(player=Player.RED, transfers=red_transfers),
+            ]
+        ),
+    )
+
+    migrator._update_transfers()
+
+    assert blue_transfer.player is Player.BLUE
+    assert red_transfer.player is Player.RED
+
+
+def test_pending_transfers_list_context_menu_delegates_cancel_predicate(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    transfer = cast(
+        Any, SimpleNamespace(player=Player.BLUE, description="No transports available")
+    )
+    blue_transfers = MagicMock(pending_transfers=[transfer], pending_transfer_count=1)
+    game = SimpleNamespace(
+        settings=SimpleNamespace(enable_enemy_buy_sell=False),
+        coalition_for=lambda player: SimpleNamespace(transfers=blue_transfers),
+    )
+    game_model = cast(Any, SimpleNamespace(game=game))
+    transfer_model = TransferModel(game_model)
+    game_model.transfer_model = transfer_model
+    dialog = PendingTransfersDialog(game_model)
+    list_widget = dialog.transfer_list
+    list_widget.resize(200, 100)
+    list_widget.show()
+    app.processEvents()
+    menu_exec = MagicMock()
+    monkeypatch.setattr(QMenu, "exec_", menu_exec)
+    event = QContextMenuEvent(
+        QContextMenuEvent.Reason.Mouse,
+        list_widget.visualRect(list_widget.model().index(0, 0)).center(),
+        QPoint(10, 10),
+    )
+    list_widget.contextMenuEvent(event)
+
+    menu_exec.assert_called_once()
 
 
 def test_red_transfer_model_maps_rows_and_cancels_red_transfer() -> None:

@@ -249,7 +249,7 @@ class Migrator:
             transfer.player = coalition.player
             return
         if isinstance(owner, bool):
-            transfer.player = Player.BLUE if owner else Player.RED
+            transfer.player = coalition.player
         if transfer.player != coalition.player:
             raise RuntimeError(
                 f"Transfer {transfer} has owner {transfer.player} but is in the "

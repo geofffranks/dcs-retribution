@@ -4,6 +4,8 @@ from PySide6.QtCore import (
     QModelIndex,
     Qt,
 )
+from typing import Callable
+
 from PySide6.QtGui import QContextMenuEvent, QAction
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -40,9 +42,14 @@ class TransferDelegate(TwoColumnRowDelegate):
 class PendingTransfersList(QListView):
     """List view for displaying the pending unit transfers."""
 
-    def __init__(self, transfer_model: TransferModel) -> None:
+    def __init__(
+        self,
+        transfer_model: TransferModel,
+        can_cancel: Callable[[QModelIndex], bool],
+    ) -> None:
         super().__init__()
         self.transfer_model = transfer_model
+        self.can_cancel = can_cancel
 
         self.setItemDelegate(TransferDelegate(self.transfer_model))
         self.setModel(self.transfer_model)
@@ -88,7 +95,7 @@ class PendingTransfersDialog(QDialog):
         layout = QVBoxLayout()
         self.setLayout(layout)
 
-        self.transfer_list = PendingTransfersList(self.transfer_model)
+        self.transfer_list = PendingTransfersList(self.transfer_model, self.can_cancel)
         self.transfer_list.selectionModel().selectionChanged.connect(
             self.on_selection_changed
         )
