@@ -62,6 +62,34 @@ class _DesiredUnit:
     grid_index: int
 
 
+def _projected_motorpool_units(
+    motorpools: list[MotorpoolGroundObject], cap: int
+) -> list[tuple[MotorpoolGroundObject, GroundUnitType]]:
+    if cap <= 0 or not motorpools:
+        return []
+    reserve = reserve_armor_for(motorpools[0].control_point)
+    selected = _select_capped(reserve, cap)
+    expanded = [
+        unit_type
+        for unit_type in sorted(selected, key=lambda item: item.variant_id)
+        for _ in range(selected[unit_type])
+    ]
+    return [
+        (motorpools[slot % len(motorpools)], unit_type)
+        for slot, unit_type in enumerate(expanded)
+    ]
+
+
+def projected_motorpool_counts(
+    motorpools: list[MotorpoolGroundObject], cap: int
+) -> dict[UUID, int]:
+    """Return the shared-cap projected unit count for each motorpool TGO."""
+    counts: defaultdict[UUID, int] = defaultdict(int)
+    for tgo, _unit_type in _projected_motorpool_units(motorpools, cap):
+        counts[tgo.id] += 1
+    return dict(counts)
+
+
 class MotorpoolPopulator:
     """Reconcile the persisted motorpool cache with each CP's current reserve."""
 
@@ -89,20 +117,10 @@ class MotorpoolPopulator:
     def _desired_projection(
         self, motorpools: list[MotorpoolGroundObject], cap: int
     ) -> list[_DesiredUnit]:
-        if cap <= 0:
-            return []
-        reserve = reserve_armor_for(motorpools[0].control_point)
-        selected = _select_capped(reserve, cap)
-        expanded = [
-            unit_type
-            for unit_type in sorted(selected, key=lambda item: item.variant_id)
-            for _ in range(selected[unit_type])
-        ]
         ordinals: defaultdict[tuple[UUID, str], int] = defaultdict(int)
         grid_indices: defaultdict[UUID, int] = defaultdict(int)
         desired: list[_DesiredUnit] = []
-        for slot, unit_type in enumerate(expanded):
-            tgo = motorpools[slot % len(motorpools)]
+        for tgo, unit_type in _projected_motorpool_units(motorpools, cap):
             slice_key = (tgo.id, unit_type.variant_id)
             ordinal = ordinals[slice_key]
             desired.append(
@@ -175,7 +193,7 @@ class MotorpoolPopulator:
         for group in tgo.groups:
             for unit in group.units:
                 key = tgo.motorpool_projection_keys.get(unit.id)
-                if key is not None:
+                if key is not None and unit.alive:
                     current_by_key[key] = (group, unit)
 
         desired_keys = {entry.key for entry in desired}

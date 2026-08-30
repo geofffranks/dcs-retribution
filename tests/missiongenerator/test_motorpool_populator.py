@@ -471,6 +471,25 @@ def test_duplicate_persisted_keys_retain_first_authored_unit() -> None:
     assert game.motorpool_id_counts == allocator_counts
 
 
+def test_dead_persisted_unit_is_replaced_for_matching_projection_key() -> None:
+    gut = _gut()
+    tgo, cp = _motorpool({gut: 1})
+    game = _game([cp], cap=10)
+    populator = MotorpoolPopulator(cast("Game", game))
+    populator.populate()
+    dead_unit = tgo.groups[0].units[0]
+    dead_unit.alive = False
+    allocator_counts = dict(game.motorpool_id_counts)
+
+    populator.populate()
+
+    live_units = _units(tgo)
+    assert len(live_units) == 1
+    assert live_units[0].alive
+    assert live_units[0].id != dead_unit.id
+    assert game.motorpool_id_counts["u"] == allocator_counts["u"] + 1
+
+
 def test_disabled_or_zero_cap_reconciliation_empties_every_motorpool() -> None:
     gut = _gut()
     first, second, cp = _two_motorpools({gut: 4})

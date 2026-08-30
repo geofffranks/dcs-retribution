@@ -111,6 +111,30 @@ def test_motorpool_targets_sorted_nearest_first() -> None:
     assert targets == [near_tgo, far_tgo]
 
 
+def test_motorpool_targeting_matches_shared_projection_across_tgos() -> None:
+    gut = _gut()
+    primary, cp = _motorpool_cp({gut: 1}, friendly=False)
+    secondary = MotorpoolGroundObject(
+        "CP Motorpool 1",
+        PresetLocation(
+            "secondary",
+            Point(100.0, 0.0, MagicMock(spec=Terrain)),
+            Heading.from_degrees(0.0),
+        ),
+        cp,
+        GroupTask.MOTORPOOL,
+    )
+    secondary.distance_to = MagicMock(return_value=100.0)  # type: ignore[method-assign]
+    cp.ground_objects = [primary, secondary]
+    game = _game([cp, _friendly_cp()], cap=10)
+    cp.coalition.game = game
+
+    targets = list(ObjectiveFinder(cast("Game", game), Player.BLUE).motorpool_targets())
+
+    assert targets == [primary]
+    assert PlanMotorpoolAttack(secondary, FlightType.BAI)._rendered_unit_count() == 0
+
+
 # --- PlanMotorpoolAttack ------------------------------------------------------
 
 

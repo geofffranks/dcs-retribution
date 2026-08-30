@@ -19,7 +19,6 @@ from game.theater import (
     NavalControlPoint,
     Player,
 )
-from game.ground_forces.ai_ground_planner import reserve_armor_for
 from game.theater.theatergroundobject import (
     BuildingGroundObject,
     IadsGroundObject,
@@ -142,8 +141,8 @@ class ObjectiveFinder:
         """Iterates over enemy motorpool depots worth striking this turn.
 
         A motorpool is a target only when it will actually render reserve armor,
-        so membership is gated on the live reserve pool (``reserve_armor_for``)
-        plus the motorpool being enabled with a positive spawn cap. Unlike
+        so membership is gated on the per-TGO shared-cap projection plus the
+        motorpool being enabled with a positive spawn cap. Unlike
         :meth:`strike_targets`, ``is_dead`` is intentionally *not* used: the
         motorpool's groups are repopulated each mission *after* planning runs, so
         ``is_dead`` (which reads ``alive_unit_count``) reflects a stale render
@@ -155,12 +154,20 @@ class ObjectiveFinder:
         settings = self.game.settings
         if not settings.motorpool_enabled or settings.motorpool_spawn_cap <= 0:
             return
+        from game.missiongenerator.motorpoolpopulator import projected_motorpool_counts
+
         candidates: list[MotorpoolGroundObject] = []
         for enemy_cp in self.enemy_control_points():
-            if not reserve_armor_for(enemy_cp):
-                continue
-            for ground_object in enemy_cp.ground_objects:
-                if isinstance(ground_object, MotorpoolGroundObject):
+            motorpools = [
+                ground_object
+                for ground_object in enemy_cp.ground_objects
+                if isinstance(ground_object, MotorpoolGroundObject)
+            ]
+            projected_counts = projected_motorpool_counts(
+                motorpools, settings.motorpool_spawn_cap
+            )
+            for ground_object in motorpools:
+                if projected_counts.get(ground_object.id, 0) > 0:
                     candidates.append(ground_object)
         yield from self._targets_by_range(candidates)
 
