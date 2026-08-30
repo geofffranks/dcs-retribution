@@ -381,6 +381,9 @@ class TransferModel(QAbstractListModel):
         #: on every call so that row contents never change silently; visibility
         #: changes are applied atomically inside ``sync_game_and_visibility``.
         self._red_visible: bool = self._compute_red_visible()
+        sim_controller = getattr(self.game_model, "sim_controller", None)
+        if sim_controller is not None:
+            sim_controller.sim_update.connect(self.on_sim_update)
 
     def _compute_red_visible(self) -> bool:
         """Whether RED rows are visible given the current game state."""
@@ -426,6 +429,12 @@ class TransferModel(QAbstractListModel):
         self.beginResetModel()
         self._red_visible = new_red_visible
         self.endResetModel()
+
+    def on_sim_update(self, _events: GameUpdateEvents) -> None:
+        """Refresh pending transfers replaced during turn processing."""
+        self.beginResetModel()
+        self.endResetModel()
+        self.inventory_changed.emit()
 
     def data(self, index: QModelIndex, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
         if not index.isValid():

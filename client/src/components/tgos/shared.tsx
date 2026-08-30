@@ -20,10 +20,10 @@ export function formatInventory(inventory: string[]): string {
 }
 
 function formatAggregateInventory(
-  inventory: AggregateGroundUnitEntry[]
+  inventory: AggregateGroundUnitEntry[],
 ): string {
   return formatInventory(
-    inventory.map((entry) => `${entry.count} × ${entry.display_name}`)
+    inventory.map((entry) => `${entry.count} × ${entry.display_name}`),
   );
 }
 
@@ -48,7 +48,10 @@ function InventorySection(props: { label: string; inventory: string }) {
 
 export function TgoTooltipContent(props: { tgo: TgoModel }) {
   const reserve = formatInventory(props.tgo.reserve_units ?? []);
-  const unrendered = formatAggregateInventory(props.tgo.unrendered_reserve ?? []);
+  const expected = formatAggregateInventory(props.tgo.expected_inventory ?? []);
+  const unrendered = formatAggregateInventory(
+    props.tgo.unrendered_reserve ?? [],
+  );
   const transit = formatAggregateInventory(props.tgo.in_transit_units ?? []);
   const units = props.tgo.units;
 
@@ -59,6 +62,7 @@ export function TgoTooltipContent(props: { tgo: TgoModel }) {
       {props.tgo.category === "motorpool" ? (
         <>
           <InventorySection label="Motorpool reserve" inventory={reserve} />
+          <InventorySection label="Expected next turn" inventory={expected} />
           <InventorySection label="Unrendered reserve" inventory={unrendered} />
           <InventorySection label="In transit" inventory={transit} />
         </>

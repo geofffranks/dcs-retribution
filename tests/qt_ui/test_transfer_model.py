@@ -127,6 +127,10 @@ class SignalCounter(QObject):
         self.count += 1
 
 
+class FakeSimController(QObject):
+    sim_update = Signal(GameUpdateEvents)
+
+
 class FakePurchaseAdapter:
     def __init__(self, current: int) -> None:
         self.current = current
@@ -265,6 +269,53 @@ def test_transfer_cancel_emits_inventory_changed(app: QApplication) -> None:
     model.cancel_transfer(transfer)
 
     assert fired == [1]
+
+
+def test_sim_update_resets_rows_when_pending_transfers_are_replaced(
+    app: QApplication,
+) -> None:
+    """Turn processing replaces the collection, so the open view must reset."""
+    blue = _make_pending(Player.BLUE)
+    transfer = _transfer(_cp("Alpha"), _cp("Bravo"), Player.BLUE)
+    blue.new_transfer(transfer, datetime.now(), GameUpdateEvents())
+    sim_controller = FakeSimController()
+    game = _game_with_settings(blue, _make_pending(Player.RED))
+    game_model = _game_model(game)
+    game_model.sim_controller = sim_controller
+    model = TransferModel(game_model)
+    resets: list[int] = []
+    inventory_refreshes: list[int] = []
+    model.modelReset.connect(lambda: resets.append(1))
+    model.inventory_changed.connect(lambda: inventory_refreshes.append(1))
+
+    blue.pending_transfers = []
+    sim_controller.sim_update.emit(GameUpdateEvents())
+
+    assert model.rowCount() == 0
+    assert resets == [1]
+    assert inventory_refreshes == [1]
+
+
+def test_sim_update_resets_rows_when_pending_transfer_is_removed(
+    app: QApplication,
+) -> None:
+    """Turn processing removal is visible even when the list object is retained."""
+    blue = _make_pending(Player.BLUE)
+    transfer = _transfer(_cp("Alpha"), _cp("Bravo"), Player.BLUE)
+    blue.new_transfer(transfer, datetime.now(), GameUpdateEvents())
+    sim_controller = FakeSimController()
+    game = _game_with_settings(blue, _make_pending(Player.RED))
+    game_model = _game_model(game)
+    game_model.sim_controller = sim_controller
+    model = TransferModel(game_model)
+    resets: list[int] = []
+    model.modelReset.connect(lambda: resets.append(1))
+
+    blue.pending_transfers.remove(transfer)
+    sim_controller.sim_update.emit(GameUpdateEvents())
+
+    assert model.rowCount() == 0
+    assert resets == [1]
 
 
 def test_blue_insert_precedes_visible_red_rows(app: QApplication) -> None:

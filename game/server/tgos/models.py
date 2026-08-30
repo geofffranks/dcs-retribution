@@ -32,6 +32,7 @@ class TgoJs(BaseModel):
     position: LeafletPoint
     units: list[str]  # TODO: Event stream
     reserve_units: list[str]
+    expected_inventory: list[AggregateGroundUnitEntry]
     unrendered_reserve: list[AggregateGroundUnitEntry]
     in_transit_units: list[AggregateGroundUnitEntry]
     threat_ranges: list[float]  # TODO: Event stream
@@ -78,6 +79,7 @@ class TgoJs(BaseModel):
         ):
             destination = LeafletPoint.from_latlng(tgo.target_position.latlng())
         reserve_units: list[str] = []
+        expected_inventory: list[AggregateGroundUnitEntry] = []
         unrendered_reserve: list[AggregateGroundUnitEntry] = []
         in_transit_units: list[AggregateGroundUnitEntry] = []
         if isinstance(tgo, MotorpoolGroundObject):
@@ -89,6 +91,19 @@ class TgoJs(BaseModel):
             ]
             if motorpools and motorpools[0] is tgo:
                 reserve = reserve_armor_for(tgo.control_point)
+                pending_orders = tgo.control_point.ground_unit_orders.units
+                current_inventory = {
+                    unit_type: tgo.control_point.base.total_units_of_type(unit_type)
+                    for unit_type in set(tgo.control_point.base.armor)
+                    | set(pending_orders)
+                }
+                expected_inventory = TgoJs._aggregate_entries(
+                    {
+                        unit_type: count
+                        + tgo.control_point.ground_unit_orders.pending_orders(unit_type)
+                        for unit_type, count in current_inventory.items()
+                    }
+                )
                 settings = tgo.control_point.coalition.game.settings
                 selected = (
                     _select_capped(reserve, settings.motorpool_spawn_cap)
@@ -118,6 +133,7 @@ class TgoJs(BaseModel):
             position=tgo.position.latlng(),
             units=[unit.display_name for unit in tgo.units],
             reserve_units=reserve_units,
+            expected_inventory=expected_inventory,
             unrendered_reserve=unrendered_reserve,
             in_transit_units=in_transit_units,
             threat_ranges=threat_ranges,

@@ -469,6 +469,7 @@ export type Tgo = {
   position: LatLng;
   units: string[];
   reserve_units?: string[];
+  expected_inventory?: AggregateGroundUnitEntry[];
   unrendered_reserve?: AggregateGroundUnitEntry[];
   in_transit_units?: AggregateGroundUnitEntry[];
   threat_ranges: number[];

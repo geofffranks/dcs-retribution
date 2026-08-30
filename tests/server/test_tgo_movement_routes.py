@@ -109,11 +109,19 @@ def _populated_motorpools(
     reserve: dict[GroundUnitType, int], cap: int, count: int = 1
 ) -> tuple[list[MotorpoolGroundObject], Any]:
     coalition = SimpleNamespace(transfers=[])
+    armor = dict(reserve)
     cp = SimpleNamespace(
         name="factory",
         captured=Player.BLUE,
         connected_points=[],
-        base=SimpleNamespace(armor=dict(reserve), total_armor=sum(reserve.values())),
+        base=SimpleNamespace(
+            armor=armor,
+            total_armor=sum(armor.values()),
+            total_units_of_type=lambda unit_type: armor.get(unit_type, 0),
+        ),
+        ground_unit_orders=SimpleNamespace(
+            units={}, pending_orders=lambda _unit_type: 0
+        ),
         coalition=coalition,
     )
     motorpools = [
@@ -163,6 +171,29 @@ def test_motorpool_tgo_reserve_units_match_popup_display_names(
 
     assert TgoJs.for_tgo(tgo).reserve_units == [unit.display_name for unit in tgo.units]
     assert TgoJs.for_tgo(tgo).reserve_units[0].startswith("2228 |")
+
+
+def test_motorpool_tgo_expected_inventory_includes_pending_orders(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_latlng(monkeypatch)
+    abrams = next(GroundUnitType.for_dcs_type(Armor.M_1_Abrams))
+    bradley = next(GroundUnitType.for_dcs_type(Armor.M_2_Bradley))
+    motorpools, cp = _populated_motorpools({abrams: 3, bradley: 1}, cap=3)
+    cp.ground_unit_orders = SimpleNamespace(
+        units={abrams: 2, bradley: -1},
+        pending_orders=lambda unit_type: 2 if unit_type == abrams else -1,
+    )
+
+    expected = TgoJs.for_tgo(motorpools[0]).expected_inventory
+
+    assert [entry.dict() for entry in expected] == [
+        {
+            "unit_type": abrams.variant_id,
+            "display_name": abrams.display_name,
+            "count": 5,
+        },
+    ]
 
 
 def test_event_serialization_reconciles_motorpool_payload(
