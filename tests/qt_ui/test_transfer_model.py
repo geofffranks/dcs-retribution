@@ -16,7 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from PySide6.QtCore import QModelIndex, QObject, Signal
-from PySide6.QtWidgets import QApplication, QGridLayout, QPushButton
+from PySide6.QtWidgets import QApplication, QGridLayout, QPushButton, QWidget
 
 from game.dcs.groundunittype import GroundUnitType
 from game.purchaseadapter import GroundUnitPurchaseAdapter
@@ -341,6 +341,50 @@ def test_ground_purchase_does_not_refresh_frames_when_validation_fails(
 
     assert cp.ground_unit_orders.pending_orders(unit_type) == 0
     assert refreshes == []
+
+
+@pytest.mark.parametrize(
+    ("enemy_buy_sell", "expected_tabs"),
+    [
+        (False, ["Intel", "Departing Convoys"]),
+        (True, ["Intel", "Departing Convoys", "Ground Forces HQ"]),
+    ],
+)
+def test_red_base_menu_exposes_authorized_ground_forces_tab(
+    app: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+    enemy_buy_sell: bool,
+    expected_tabs: list[str],
+) -> None:
+    """RED keeps its informational tabs and gates Ground Forces HQ by setting."""
+    from qt_ui.windows.basemenu import QBaseMenuTabs as tabs_module
+
+    class StubIntel(QWidget):
+        def __init__(self, _cp: Any) -> None:
+            super().__init__()
+
+    class StubConvoys(QWidget):
+        def __init__(self, _cp: Any, _game_model: Any) -> None:
+            super().__init__()
+
+    class StubGroundForces(QWidget):
+        def __init__(self, _cp: Any, _game_model: Any) -> None:
+            super().__init__()
+
+    monkeypatch.setattr(tabs_module, "QIntelInfo", StubIntel)
+    monkeypatch.setattr(tabs_module, "DepartingConvoysMenu", StubConvoys)
+    monkeypatch.setattr(tabs_module, "QGroundForcesHQ", StubGroundForces)
+
+    cp = SimpleNamespace(captured=Player.RED)
+    game_model = SimpleNamespace(
+        game=SimpleNamespace(
+            settings=SimpleNamespace(enable_enemy_buy_sell=enemy_buy_sell)
+        )
+    )
+
+    tabs = tabs_module.QBaseMenuTabs(cast(Any, cp), cast(Any, game_model))
+
+    assert [tabs.tabText(index) for index in range(tabs.count())] == expected_tabs
 
 
 def test_armor_recruitment_menu_uses_captured_faction_catalog(
