@@ -80,6 +80,32 @@ def _friendly_cp() -> ControlPoint:
 # --- ObjectiveFinder.motorpool_targets ---------------------------------------
 
 
+def test_motorpool_targets_uses_neutral_projection_interface(
+    monkeypatch: Any,
+) -> None:
+    gut = _gut()
+    target, enemy_cp = _motorpool_cp({gut: 4}, friendly=False)
+    game = _game([enemy_cp, _friendly_cp()])
+    calls: list[tuple[MotorpoolGroundObject, bool, int]] = []
+
+    def projected_count(
+        tgo: MotorpoolGroundObject, enabled: bool, spawn_cap: int
+    ) -> int:
+        calls.append((tgo, enabled, spawn_cap))
+        return 1
+
+    monkeypatch.setattr(
+        "game.theater.theatergroundobject.motorpool_rendered_unit_count",
+        projected_count,
+        raising=False,
+    )
+
+    assert list(
+        ObjectiveFinder(cast("Game", game), Player.BLUE).motorpool_targets()
+    ) == [target]
+    assert calls == [(target, True, 10)]
+
+
 def test_motorpool_targets_yields_enemy_motorpool_with_reserve() -> None:
     gut = _gut()
     enemy_tgo, enemy_cp = _motorpool_cp({gut: 4}, friendly=False)

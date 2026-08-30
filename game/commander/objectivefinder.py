@@ -139,9 +139,7 @@ class ObjectiveFinder:
 
     def motorpool_targets(self) -> Iterator[MotorpoolGroundObject]:
         """Iterates over enemy motorpool depots worth striking this turn."""
-        from game.missiongenerator.motorpoolpopulator import (
-            motorpool_rendered_unit_count,
-        )
+        from game.theater.theatergroundobject import motorpool_rendered_unit_count
 
         if not self.game.settings.motorpool_enabled:
             return
