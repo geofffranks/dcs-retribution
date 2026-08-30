@@ -120,6 +120,22 @@ def test_transfer_owner_survives_origin_capture_and_split() -> None:
     assert pending.split_transfer(transfer, 1).player is Player.BLUE
 
 
+def test_transport_rejects_mixed_owner_transfer_without_mutating() -> None:
+    origin = cast(Any, SimpleNamespace(position=object()))
+    destination = cast(Any, SimpleNamespace(position=object()))
+    blue_transfer = TransferOrder(origin, destination, {}, player=Player.BLUE)
+    red_transfer = TransferOrder(origin, destination, {}, player=Player.RED)
+    transport = MultiGroupTransport("Convoy", origin, destination)
+    transport.add_units(blue_transfer)
+
+    with pytest.raises(ValueError, match="ownership"):
+        transport.add_units(red_transfer)
+
+    assert transport.transfers == [blue_transfer]
+    assert blue_transfer.transport is transport
+    assert red_transfer.transport is None
+
+
 def test_transfer_rejects_collection_owner_mismatch_without_assert() -> None:
     pending = PendingTransfers(cast(Any, SimpleNamespace()), Player.BLUE)
     transfer = cast(Any, SimpleNamespace(player=Player.RED))
@@ -200,6 +216,43 @@ def test_pending_transfers_list_context_menu_delegates_cancel_predicate(
     list_widget.contextMenuEvent(event)
 
     menu_exec.assert_called_once()
+
+
+def test_transfer_model_refreshes_rows_when_red_visibility_changes(
+    app: QApplication,
+) -> None:
+    red_transfer = cast(Any, SimpleNamespace(player=Player.RED))
+    blue_transfer = cast(Any, SimpleNamespace(player=Player.BLUE))
+    red_transfers = SimpleNamespace(pending_transfers=[red_transfer])
+    blue_transfers = SimpleNamespace(pending_transfers=[blue_transfer])
+    settings = SimpleNamespace(enable_enemy_buy_sell=False)
+    game = SimpleNamespace(
+        settings=settings,
+        coalition_for=lambda player: SimpleNamespace(
+            transfers=red_transfers if player is Player.RED else blue_transfers
+        ),
+    )
+    game_model = cast(Any, SimpleNamespace(game=game))
+    model = TransferModel(game_model)
+    model_resets = []
+    layouts = []
+    data_changes = []
+    model.modelAboutToBeReset.connect(lambda: model_resets.append("about"))
+    model.modelReset.connect(lambda: model_resets.append("reset"))
+    model.layoutAboutToBeChanged.connect(lambda: layouts.append("about"))
+    model.layoutChanged.connect(lambda: layouts.append("changed"))
+    model.dataChanged.connect(lambda *_args: data_changes.append(True))
+
+    assert model.rowCount() == 1
+    settings.enable_enemy_buy_sell = True
+    model.sync_game_and_visibility()
+
+    assert model.rowCount() == 2
+    assert model.transfer_at_index(model.index(1, 0)) is red_transfer
+    assert model.red_visible is True
+    assert model_resets == ["about", "reset"]
+    assert layouts == ["about", "changed"]
+    assert data_changes
 
 
 def test_red_transfer_model_maps_rows_and_cancels_red_transfer() -> None:

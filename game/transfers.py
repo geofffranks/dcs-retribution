@@ -412,6 +412,8 @@ class MultiGroupTransport(MissionTarget, Transport):
         return self.player_owned == to_player
 
     def add_units(self, transfer: TransferOrder) -> None:
+        if self.transfers and transfer.player is not self.player_owned:
+            raise ValueError("Transport ownership does not match transfer's player")
         self.transfers.append(transfer)
         transfer.transport = self
 
