@@ -1,3 +1,5 @@
+import math
+
 from dcs.point import MovingPoint
 from dcs.task import (
     OptECMUsing,
@@ -9,10 +11,6 @@ from dcs.task import (
 from game.theater.theatergroundobject import MotorpoolGroundObject
 from game.utils import nautical_miles
 from .pydcswaypointbuilder import PydcsWaypointBuilder
-
-# Five columns and five rows at 12 m spacing, starting 45.72 m behind the garage:
-# hypot(45.72 + 4 * 12, 4 * 12) rounds up to 106 m.
-_MOTORPOOL_ENGAGEMENT_RADIUS_M = 106
 
 
 class ArmedReconIngressBuilder(PydcsWaypointBuilder):
@@ -26,11 +24,26 @@ class ArmedReconIngressBuilder(PydcsWaypointBuilder):
         configured_range = (
             self.flight.coalition.game.settings.armed_recon_engagement_range_distance
         )
-        radius = (
-            _MOTORPOOL_ENGAGEMENT_RADIUS_M
-            if isinstance(target, MotorpoolGroundObject)
-            else int(nautical_miles(configured_range).meters)
-        )
+        if isinstance(target, MotorpoolGroundObject):
+            unit_positions = [
+                unit.position
+                for group in target.groups
+                for unit in group.units
+                if unit.alive
+            ]
+            radius = (
+                math.ceil(
+                    max(
+                        target.position.distance_to_point(position)
+                        for position in unit_positions
+                    )
+                )
+                + 1
+                if unit_positions
+                else 0
+            )
+        else:
+            radius = int(nautical_miles(configured_range).meters)
         waypoint.add_task(
             ControlledTask(
                 EngageTargetsInZone(

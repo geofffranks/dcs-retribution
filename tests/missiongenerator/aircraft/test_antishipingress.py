@@ -1,14 +1,27 @@
 import logging
-from typing import Any, Callable
+from types import SimpleNamespace
+from typing import Any, Callable, cast
 from unittest.mock import MagicMock
 
 import pytest
-from dcs.task import AttackGroup
+from dcs import Point
+from dcs.point import MovingPoint
+from dcs.task import AttackGroup, ControlledTask, EngageTargetsInZone
+from dcs.terrain import Terrain
 
+from game.data.groups import GroupTask
 from game.missiongenerator.aircraft.waypoints.antishipingress import (
     AntiShipIngressBuilder,
 )
+from game.missiongenerator.aircraft.waypoints.armedreconingress import (
+    ArmedReconIngressBuilder,
+)
+from game.missiongenerator.aircraft.waypoints.baiingress import BaiIngressBuilder
 from game.theater import NavalControlPoint, TheaterGroundObject
+from game.theater.controlpoint import ControlPoint
+from game.theater.presetlocation import PresetLocation
+from game.theater.theatergroundobject import MotorpoolGroundObject
+from game.utils import Heading
 
 
 def _model_group(name: str) -> MagicMock:
@@ -83,3 +96,101 @@ def test_warns_when_no_attackable_group(caplog: pytest.LogCaptureFixture) -> Non
 
     assert not [t for t in waypoint.tasks if isinstance(t, AttackGroup)]
     assert any("no attackable target group" in rec.message for rec in caplog.records)
+
+
+def _motorpool_target(unit_positions: list[Point]) -> MotorpoolGroundObject:
+    control_point = MagicMock(spec=ControlPoint)
+    location = PresetLocation(
+        "Garage", Point(0.0, 0.0, MagicMock(spec=Terrain)), Heading.from_degrees(0.0)
+    )
+    target = MotorpoolGroundObject(
+        "Motorpool", location, control_point, GroupTask.MOTORPOOL
+    )
+    target.groups = cast(
+        Any,
+        [
+            SimpleNamespace(
+                units=[SimpleNamespace(position=p, alive=True) for p in unit_positions]
+            )
+        ],
+    )
+    return target
+
+
+def _motorpool_ingress_builder(
+    builder_type: type[Any], target: MotorpoolGroundObject
+) -> tuple[Any, MovingPoint]:
+    builder: Any = object.__new__(builder_type)
+    builder.package = SimpleNamespace(target=target)
+    builder.flight = SimpleNamespace(
+        is_helo=False,
+        client_count=0,
+        coalition=SimpleNamespace(
+            game=SimpleNamespace(
+                settings=SimpleNamespace(armed_recon_engagement_range_distance=5)
+            )
+        ),
+        package=SimpleNamespace(target=target),
+        flight_plan=SimpleNamespace(
+            tot_waypoint=SimpleNamespace(position=target.position)
+        ),
+    )
+    builder.register_special_ingress_points = MagicMock()
+    builder.mission = MagicMock()
+    waypoint = MovingPoint(target.position)
+    return builder, waypoint
+
+
+def test_bai_motorpool_uses_one_zone_task_for_rendered_units() -> None:
+    target = _motorpool_target(
+        [
+            Point(3.0, 4.0, MagicMock(spec=Terrain)),
+            Point(0.0, 10.0, MagicMock(spec=Terrain)),
+        ]
+    )
+    builder, waypoint = _motorpool_ingress_builder(BaiIngressBuilder, target)
+
+    cast(Any, builder).add_tasks(waypoint)
+
+    zone_tasks = [
+        task for task in waypoint.tasks if isinstance(task, EngageTargetsInZone)
+    ]
+    assert len(zone_tasks) == 1
+    assert not [task for task in waypoint.tasks if isinstance(task, AttackGroup)]
+    assert zone_tasks[0].params["zoneRadius"] == 11
+    builder.mission.find_group.assert_not_called()
+
+
+def test_armed_recon_motorpool_radius_uses_rendered_units_only() -> None:
+    target = _motorpool_target(
+        [
+            Point(6.0, 8.0, MagicMock(spec=Terrain)),
+            Point(0.0, 10.0, MagicMock(spec=Terrain)),
+        ]
+    )
+    builder, waypoint = _motorpool_ingress_builder(ArmedReconIngressBuilder, target)
+
+    cast(Any, builder).add_tasks(waypoint)
+
+    task = next(
+        task
+        for task in waypoint.tasks
+        if isinstance(task, ControlledTask)
+        and task.params["task"]["id"] == "EngageTargetsInZone"
+    )
+    assert task.params["task"]["params"]["zoneRadius"] == 11
+
+
+def test_armed_recon_motorpool_empty_target_has_zero_radius() -> None:
+    target = _motorpool_target([])
+    builder, waypoint = _motorpool_ingress_builder(ArmedReconIngressBuilder, target)
+
+    cast(Any, builder).add_tasks(waypoint)
+
+    task = next(
+        task
+        for task in waypoint.tasks
+        if isinstance(task, ControlledTask)
+        and task.params["task"]["id"] == "EngageTargetsInZone"
+    )
+    assert task.params["task"]["params"]["zoneRadius"] == 0
