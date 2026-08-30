@@ -68,8 +68,6 @@ def motorpool_rendered_unit_count(
     """
     if not motorpool_enabled or spawn_cap <= 0:
         return 0
-    if tgo.groups:
-        return tgo.alive_unit_count
     motorpools = [
         candidate
         for candidate in tgo.control_point.ground_objects
@@ -77,7 +75,14 @@ def motorpool_rendered_unit_count(
     ]
     if tgo not in motorpools:
         return 0
-    return sum(_projected_counts(motorpools, spawn_cap)[motorpools.index(tgo)].values())
+    projected_count = sum(
+        _projected_counts(motorpools, spawn_cap)[motorpools.index(tgo)].values()
+    )
+    if tgo.groups:
+        # Groups are ephemeral and may outlive a reserve decrement from the prior
+        # mission. Never plan more units than the next current snapshot can render.
+        return min(tgo.alive_unit_count, projected_count)
+    return projected_count
 
 
 class MotorpoolPopulator:

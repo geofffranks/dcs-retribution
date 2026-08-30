@@ -14,6 +14,7 @@ from game.missiongenerator.motorpoolpopulator import (
     MotorpoolPopulator,
     motorpool_rendered_unit_count,
 )
+from game.theater.base import Base
 from game.theater.controlpoint import ControlPoint
 from game.theater.presetlocation import PresetLocation
 from game.theater.theatergroundobject import MotorpoolGroundObject
@@ -108,6 +109,23 @@ def test_rendered_unit_count_ignores_stale_groups_when_not_rendering(
     tgo.groups = cast("list[TheaterGroup]", [SimpleNamespace(alive_units=1)])
 
     assert motorpool_rendered_unit_count(tgo, enabled, cap) == 0
+
+
+def test_rendered_unit_count_uses_current_reserve_after_consuming_snapshot() -> None:
+    gut = _gut()
+    tgo, cp = _motorpool({gut: 3})
+    cp.base = Base()
+    cp.base.armor = {gut: 3}
+    game = _game([cp], cap=10)
+    MotorpoolPopulator(cast("Game", game)).populate()
+
+    assert motorpool_rendered_unit_count(tgo, motorpool_enabled=True, spawn_cap=10) == 3
+
+    # Mission losses consume the persistent reserve while the populated groups
+    # remain as the previous mission's ephemeral render snapshot.
+    cp.base.commit_losses({gut: 3})
+
+    assert motorpool_rendered_unit_count(tgo, motorpool_enabled=True, spawn_cap=10) == 0
 
 
 def test_populate_is_idempotent_across_runs() -> None:
