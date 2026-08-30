@@ -138,13 +138,29 @@ class ObjectiveFinder:
             yield target
 
     def motorpool_targets(self) -> Iterator[MotorpoolGroundObject]:
-        """Iterates over non-empty enemy motorpool depots worth striking."""
+        """Iterates over enemy motorpool depots worth striking this turn."""
+        from game.missiongenerator.motorpoolpopulator import (
+            motorpool_rendered_unit_count,
+        )
+
+        if not self.game.settings.motorpool_enabled:
+            return
+        spawn_cap = self.game.settings.motorpool_spawn_cap
+        if spawn_cap <= 0:
+            return
+
         candidates: list[MotorpoolGroundObject] = []
         for enemy_cp in self.enemy_control_points():
             for ground_object in enemy_cp.ground_objects:
+                if not isinstance(ground_object, MotorpoolGroundObject):
+                    continue
                 if (
-                    isinstance(ground_object, MotorpoolGroundObject)
-                    and ground_object.groups
+                    motorpool_rendered_unit_count(
+                        ground_object,
+                        self.game.settings.motorpool_enabled,
+                        spawn_cap,
+                    )
+                    > 0
                 ):
                     candidates.append(ground_object)
         yield from self._targets_by_range(candidates)

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, cast
+from typing import Any, TYPE_CHECKING, cast
 from unittest.mock import MagicMock
 
 from dcs.mapping import Point
@@ -95,11 +96,68 @@ def test_motorpool_targets_excludes_motorpool_with_no_reserve() -> None:
 
 def test_motorpool_targets_excludes_motorpool_when_disabled() -> None:
     gut = _gut()
-    _disabled_tgo, enemy_cp = _motorpool_cp({gut: 4}, friendly=False)
+    disabled_tgo, enemy_cp = _motorpool_cp({gut: 4}, friendly=False)
+    disabled_tgo.groups = [MagicMock(alive_units=4)]
     game = _game([enemy_cp, _friendly_cp()], enabled=False)
     assert (
         list(ObjectiveFinder(cast("Game", game), Player.BLUE).motorpool_targets()) == []
     )
+
+
+def test_motorpool_targets_projects_empty_groups_from_reserve() -> None:
+    gut = _gut()
+    target, enemy_cp = _motorpool_cp({gut: 4}, friendly=False)
+    game = _game([enemy_cp, _friendly_cp()])
+
+    assert list(
+        ObjectiveFinder(cast("Game", game), Player.BLUE).motorpool_targets()
+    ) == [target]
+
+
+def test_motorpool_targets_excludes_dead_only_groups() -> None:
+    gut = _gut()
+    target, enemy_cp = _motorpool_cp({gut: 4}, friendly=False)
+    target.groups = [MagicMock(alive_units=0)]
+    game = _game([enemy_cp, _friendly_cp()])
+
+    assert (
+        list(ObjectiveFinder(cast("Game", game), Player.BLUE).motorpool_targets()) == []
+    )
+
+
+def test_motorpool_targets_excludes_motorpool_when_spawn_cap_is_zero() -> None:
+    gut = _gut()
+    target, enemy_cp = _motorpool_cp({gut: 4}, friendly=False)
+    target.groups = [MagicMock(alive_units=4)]
+    game = _game([enemy_cp, _friendly_cp()], cap=0)
+
+    assert (
+        list(ObjectiveFinder(cast("Game", game), Player.BLUE).motorpool_targets()) == []
+    )
+
+
+def test_plan_missions_does_not_populate_motorpools(monkeypatch: Any) -> None:
+    from game.commander.theatercommander import TheaterCommander
+    from game.commander.theaterstate import TheaterState
+
+    commander = cast(Any, TheaterCommander.__new__(TheaterCommander))
+    commander.game = object()
+    commander.player = Player.BLUE
+    commander.plan = MagicMock(return_value=None)
+    monkeypatch.setattr(
+        TheaterState,
+        "from_game",
+        classmethod(lambda cls, game, player, now, tracer: cast(Any, object())),
+    )
+    populate = MagicMock()
+    monkeypatch.setattr(
+        "game.missiongenerator.motorpoolpopulator.MotorpoolPopulator.populate",
+        populate,
+    )
+
+    commander.plan_missions(datetime.now(), MagicMock())
+
+    populate.assert_not_called()
 
 
 def test_motorpool_targets_sorted_nearest_first() -> None:

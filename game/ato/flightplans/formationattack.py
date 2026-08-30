@@ -180,8 +180,8 @@ class FormationAttackBuilder(IBuilder[FlightPlanT, LayoutT], ABC):
 
         target_waypoints: list[FlightWaypoint] = []
         is_motorpool = isinstance(self.flight.package.target, MotorpoolGroundObject)
-        if self.flight.flight_type == FlightType.STRIKE and is_motorpool:
-            for target in targets or []:
+        if self.flight.flight_type == FlightType.STRIKE and is_motorpool and targets:
+            for target in targets:
                 target_waypoints.append(
                     self.target_waypoint(self.flight, builder, target)
                 )

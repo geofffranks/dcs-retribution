@@ -93,9 +93,6 @@ class TheaterCommander(Planner[TheaterState, TheaterCommanderTask]):
         self.__dict__.update(state)
 
     def plan_missions(self, now: datetime, tracer: MultiEventTracer) -> None:
-        from game.missiongenerator.motorpoolpopulator import MotorpoolPopulator
-
-        MotorpoolPopulator(self.game).populate()
         state = TheaterState.from_game(self.game, self.player, now, tracer)
         while True:
             result = self.plan(state)
