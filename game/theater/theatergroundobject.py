@@ -710,19 +710,6 @@ class MotorpoolGroundObject(TheaterGroundObject):
         # Parked/unmanned: never advances to the front.
         return False
 
-    def mission_types(self, for_player: Player) -> Iterator[FlightType]:
-        from game.ato import FlightType
-
-        if not self.is_friendly(for_player):
-            # Armed recon is the doctrinal attack type (and what the
-            # autoplanner proposes); BAI is offered for manual planning.
-            # MissionTarget also offers armed recon, so skip the duplicate.
-            yield FlightType.ARMED_RECON
-            yield FlightType.BAI
-        for mission_type in super().mission_types(for_player):
-            if mission_type is not FlightType.ARMED_RECON:
-                yield mission_type
-
     @property
     def sidc_status(self) -> Status:
         # A motorpool is a live reserve projection: empty is a valid disabled or

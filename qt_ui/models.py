@@ -424,8 +424,6 @@ class TransferModel(QAbstractListModel):
         contents never change silently.
         """
         new_red_visible = self._compute_red_visible()
-        if new_red_visible == self._red_visible:
-            return
         self.beginResetModel()
         self._red_visible = new_red_visible
         self.endResetModel()

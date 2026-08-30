@@ -172,6 +172,44 @@ def test_transfer_cancel_emits_one_final_motorpool_update(
     assert pubs == []
 
 
+def test_transfer_create_publishes_when_events_are_omitted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Legacy direct new_transfer callers receive the generated event publication."""
+    pubs = _patch_event_stream(monkeypatch)
+    cp = _cp("alpha")
+    destination = _cp("bravo")
+    transfer = TransferOrder(
+        cast(Any, cp), cast(Any, destination), {_unit_type(): 1}, player=Player.BLUE
+    )
+
+    _make_pending(Player.BLUE).new_transfer(transfer, datetime.now())
+
+    assert len(pubs) == 1
+    assert cp.ground_objects[0] in pubs[0].updated_tgos
+    assert pubs[0].updated_supply_routes
+
+
+def test_transfer_cancel_publishes_when_events_are_omitted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Legacy direct cancel_transfer callers receive the generated event publication."""
+    pubs = _patch_event_stream(monkeypatch)
+    cp = _cp("alpha")
+    destination = _cp("bravo")
+    transfer = TransferOrder(
+        cast(Any, cp), cast(Any, destination), {_unit_type(): 1}, player=Player.BLUE
+    )
+    pending = _make_pending(Player.BLUE)
+    pending.new_transfer(transfer, datetime.now(), GameUpdateEvents())
+
+    pending.cancel_transfer(transfer)
+
+    assert len(pubs) == 1
+    assert cp.ground_objects[0] in pubs[0].updated_tgos
+    assert pubs[0].updated_supply_routes
+
+
 # ---------------------------------------------------------------------------
 # Transfer movement / completion / disband
 # ---------------------------------------------------------------------------

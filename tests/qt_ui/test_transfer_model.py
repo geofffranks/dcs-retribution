@@ -503,6 +503,36 @@ def test_game_replacement_syncs_transfer_visibility(app: QApplication) -> None:
     assert sync_calls == [1]
 
 
+def test_game_replacement_resets_same_visibility_transfer_model(
+    app: QApplication,
+) -> None:
+    """Replacing a same-visibility game still notifies views of new transfer rows."""
+    first_blue = _make_pending(Player.BLUE)
+    first_transfer = _transfer(_cp("First Origin"), _cp("First Dest"), Player.BLUE)
+    first_blue.new_transfer(first_transfer, datetime.now(), GameUpdateEvents())
+    first_game = _game_with_settings(
+        first_blue, _make_pending(Player.RED), enemy_buy_sell=False
+    )
+
+    second_blue = _make_pending(Player.BLUE)
+    second_transfer = _transfer(_cp("Second Origin"), _cp("Second Dest"), Player.BLUE)
+    second_blue.new_transfer(second_transfer, datetime.now(), GameUpdateEvents())
+    second_game = _game_with_settings(
+        second_blue, _make_pending(Player.RED), enemy_buy_sell=False
+    )
+
+    game_model = _game_model(first_game)
+    model = TransferModel(game_model)
+    resets: list[int] = []
+    cast(Any, model).modelReset.connect(lambda: resets.append(1))
+
+    game_model.game = second_game
+    model.sync_game_and_visibility()
+
+    assert resets == [1]
+    assert model.transfer_at_index(model.index(0, 0, QModelIndex())) is second_transfer
+
+
 # ---------------------------------------------------------------------------
 # Unloaded safety
 # ---------------------------------------------------------------------------

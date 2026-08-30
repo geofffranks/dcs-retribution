@@ -700,11 +700,18 @@ class PendingTransfers:
             from game.sim import GameUpdateEvents
 
             events = GameUpdateEvents()
+            publish_events = True
+        else:
+            publish_events = False
         transfer.origin.base.commit_losses(transfer.units)
         self.pending_transfers.append(transfer)
         self.arrange_transport(transfer, now, events)
         events.update_motorpools_at(transfer.origin)
         events.update_supply_routes()
+        if publish_events:
+            from game.server import EventStream
+
+            EventStream.put_nowait(events)
 
     def split_transfer(self, transfer: TransferOrder, size: int) -> TransferOrder:
         """Creates a smaller transfer that is a subset of the original."""
@@ -779,12 +786,19 @@ class PendingTransfers:
             from game.sim import GameUpdateEvents
 
             events = GameUpdateEvents()
+            publish_events = True
+        else:
+            publish_events = False
         if transfer.transport is not None:
             self.cancel_transport(transfer.transport, transfer, events)
         self.pending_transfers.remove(transfer)
         transfer.origin.base.commission_units(transfer.units)
         events.update_motorpools_at(transfer.origin)
         events.update_supply_routes()
+        if publish_events:
+            from game.server import EventStream
+
+            EventStream.put_nowait(events)
 
     def perform_transfers(self, events: GameUpdateEvents) -> None:
         """
