@@ -5,14 +5,20 @@ from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel
 
 from game.purchaseadapter import GroundUnitPurchaseAdapter
 from game.migrator import Migrator
 from game.theater.base import Base
 from game.theater.player import Player
 from game.transfers import MultiGroupTransport, PendingTransfers, TransferOrder
+from game.theater.transitnetwork import TransitNetwork
 from qt_ui.models import TransferModel
+from qt_ui.windows.basemenu.NewUnitTransferDialog import (
+    ScrollingUnitTransferGrid,
+    TransferDestinationComboBox,
+)
+from qt_ui.windows.basemenu.QBaseMenu2 import QBaseMenu2
 from qt_ui.windows.settings.QSettingsWindow import CheatSettingsBox
 
 
@@ -109,13 +115,196 @@ def test_transfer_owner_survives_origin_capture_and_split() -> None:
     assert pending.split_transfer(transfer, 1).player is Player.BLUE
 
 
-def test_transfer_migration_backfills_legacy_owner() -> None:
-    transfer = SimpleNamespace(player=True)
+def test_transfer_migration_backfills_missing_owner() -> None:
+    transfer = SimpleNamespace()
     coalition = SimpleNamespace(player=Player.RED)
 
     Migrator._normalize_single_transfer_player(transfer, coalition)
 
     assert transfer.player is Player.RED
+
+
+def test_red_transfer_model_maps_rows_and_cancels_red_transfer() -> None:
+    red_transfer = cast(Any, SimpleNamespace(player=Player.RED))
+    blue_transfer = cast(Any, SimpleNamespace(player=Player.BLUE))
+    red_transfers = MagicMock(
+        pending_transfer_count=1,
+        pending_transfers=[red_transfer],
+    )
+    blue_transfers = MagicMock(
+        pending_transfer_count=1,
+        pending_transfers=[blue_transfer],
+    )
+    game = SimpleNamespace(
+        settings=SimpleNamespace(enable_enemy_buy_sell=True),
+        coalition_for=lambda player: SimpleNamespace(
+            transfers=red_transfers if player is Player.RED else blue_transfers
+        ),
+    )
+    model = TransferModel(cast(Any, SimpleNamespace(game=game)))
+
+    assert model.rowCount() == 2
+    assert model.transfer_at_index(model.index(1, 0)) is red_transfer
+    model.cancel_transfer_at_index(model.index(1, 0))
+
+    red_transfers.cancel_transfer.assert_called_once_with(red_transfer)
+    blue_transfers.cancel_transfer.assert_not_called()
+
+
+def test_legacy_boolean_transfer_owner_is_preserved_and_validated() -> None:
+    transfer = SimpleNamespace(player=True)
+    blue_coalition = SimpleNamespace(player=Player.BLUE)
+    Migrator._normalize_single_transfer_player(transfer, blue_coalition)
+    assert transfer.player is Player.BLUE
+
+    transfer.player = False
+    red_coalition = SimpleNamespace(player=Player.RED)
+    Migrator._normalize_single_transfer_player(transfer, red_coalition)
+    assert transfer.player is Player.RED
+
+    with pytest.raises(RuntimeError, match="owner"):
+        Migrator._normalize_single_transfer_player(transfer, blue_coalition)
+
+
+def test_red_transfer_rejects_cross_coalition_destination() -> None:
+    unit_type = cast(Any, MagicMock())
+    origin = cast(
+        Any,
+        SimpleNamespace(name="Red origin", captured=Player.RED, base=Base()),
+    )
+    destination = cast(
+        Any,
+        SimpleNamespace(name="Blue destination", captured=Player.BLUE, base=Base()),
+    )
+    origin.base.commission_units({unit_type: 2})
+    pending = PendingTransfers(cast(Any, SimpleNamespace()), Player.RED)
+    transfer = TransferOrder(origin, destination, {unit_type: 1}, player=Player.RED)
+
+    with pytest.raises(ValueError, match="destination"):
+        pending.new_transfer(transfer, SimpleNamespace())
+
+    assert origin.base.total_units_of_type(unit_type) == 2
+    assert pending.pending_transfers == []
+
+
+def test_red_transfer_rejects_invalid_route_before_committing_origin_losses() -> None:
+    unit_type = cast(Any, MagicMock())
+    origin = cast(
+        Any,
+        SimpleNamespace(
+            name="Red origin",
+            captured=Player.RED,
+            base=Base(),
+            position=SimpleNamespace(distance_to_point=lambda _other: 1),
+        ),
+    )
+    destination = cast(
+        Any,
+        SimpleNamespace(
+            name="Red destination",
+            captured=Player.RED,
+            base=Base(),
+            position=SimpleNamespace(distance_to_point=lambda _other: 1),
+        ),
+    )
+    origin.base.commission_units({unit_type: 2})
+    pending = PendingTransfers(cast(Any, SimpleNamespace()), Player.RED)
+    pending.network_for = lambda _cp: TransitNetwork()
+    transfer = TransferOrder(origin, destination, {unit_type: 1}, player=Player.RED)
+
+    with pytest.raises(ValueError):
+        pending.new_transfer(transfer, SimpleNamespace())
+
+    assert origin.base.total_units_of_type(unit_type) == 2
+    assert pending.pending_transfers == []
+
+
+def test_red_transfer_destination_combo_uses_red_friendly_points(
+    app: QApplication,
+) -> None:
+    origin = cast(Any, SimpleNamespace(name="origin"))
+    red_destination = cast(
+        Any,
+        SimpleNamespace(
+            name="red destination",
+            captured=Player.RED,
+            can_deploy_ground_units=True,
+        ),
+    )
+    blue_destination = cast(
+        Any,
+        SimpleNamespace(
+            name="blue destination",
+            captured=Player.BLUE,
+            can_deploy_ground_units=True,
+        ),
+    )
+    neutral_destination = cast(
+        Any,
+        SimpleNamespace(
+            name="neutral destination",
+            captured=Player.NEUTRAL,
+            can_deploy_ground_units=True,
+        ),
+    )
+    game = cast(
+        Any,
+        SimpleNamespace(
+            theater=SimpleNamespace(
+                controlpoints=[
+                    origin,
+                    red_destination,
+                    blue_destination,
+                    neutral_destination,
+                ]
+            )
+        ),
+    )
+    origin.captured = Player.RED
+
+    combo = TransferDestinationComboBox(game, origin)
+
+    assert [combo.itemData(i) for i in range(combo.count())] == [red_destination]
+
+
+def test_red_transfer_grid_uses_red_faction_units(app: QApplication) -> None:
+    unit_type = cast(Any, SimpleNamespace(display_name="Red tank"))
+    origin = cast(
+        Any,
+        SimpleNamespace(
+            base=SimpleNamespace(total_units_of_type=lambda unit: 1),
+            captured=Player.RED,
+        ),
+    )
+    game_model = cast(
+        Any,
+        SimpleNamespace(
+            game=SimpleNamespace(
+                faction_for=lambda player: SimpleNamespace(
+                    ground_units={unit_type} if player is Player.RED else set()
+                )
+            )
+        ),
+    )
+
+    grid = ScrollingUnitTransferGrid(origin, game_model)
+
+    assert grid.transfers == {}
+    assert any(label.text() == "<b>Red tank</b>" for label in grid.findChildren(QLabel))
+
+
+def test_red_base_menu_budget_uses_captured_coalition() -> None:
+    menu = QBaseMenu2.__new__(QBaseMenu2)
+    menu.cp = SimpleNamespace(captured=Player.RED)
+    menu.budget_display = MagicMock()
+    menu.update_budget(
+        SimpleNamespace(
+            blue=SimpleNamespace(budget=10),
+            red=SimpleNamespace(budget=20),
+        )
+    )
+    menu.budget_display.setText.assert_called_once()
+    assert "20" in menu.budget_display.setText.call_args.args[0]
 
 
 def test_red_transfer_model_rejects_mutation_when_cheat_is_disabled() -> None:

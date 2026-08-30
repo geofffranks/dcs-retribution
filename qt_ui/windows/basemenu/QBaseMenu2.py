@@ -1,3 +1,5 @@
+from typing import Any
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QCloseEvent, QPixmap
 from PySide6.QtWidgets import (
@@ -167,7 +169,9 @@ class QBaseMenu2(QDialog):
             capture_button.clicked.connect(self.cheat_capture)
 
         self.budget_display = QLabel(
-            UnitTransactionFrame.BUDGET_FORMAT.format(self.game_model.game.blue.budget)
+            UnitTransactionFrame.BUDGET_FORMAT.format(
+                self._budget_coalition(self.game_model.game).budget
+            )
         )
         self.budget_display.setAlignment(
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom
@@ -401,7 +405,14 @@ class QBaseMenu2(QDialog):
     def open_transfer_dialog(self) -> None:
         NewUnitTransferDialog(self.game_model, self.cp, parent=self.window()).show()
 
+    def _budget_coalition(self, game: Game) -> Any:
+        if self.cp.captured.is_red:
+            return game.red
+        return game.blue
+
     def update_budget(self, game: Game) -> None:
         self.budget_display.setText(
-            UnitTransactionFrame.BUDGET_FORMAT.format(game.blue.budget)
+            UnitTransactionFrame.BUDGET_FORMAT.format(
+                self._budget_coalition(game).budget
+            )
         )

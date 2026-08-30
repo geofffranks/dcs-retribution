@@ -655,6 +655,16 @@ class PendingTransfers:
         assert (
             transfer.player == self.player
         ), "Transfer ownership does not match the collection's player"
+        if transfer.player.is_neutral:
+            raise ValueError("Neutral transfers are not allowed")
+        if transfer.origin.captured != transfer.player:
+            raise ValueError("Transfer origin is not owned by the transfer coalition")
+        if transfer.destination.captured != transfer.player:
+            raise ValueError(
+                "Transfer destination is not owned by the transfer coalition"
+            )
+        network = self.network_for(transfer.position)
+        network.shortest_path_between(transfer.position, transfer.destination)
         transfer.origin.base.commit_losses(transfer.units)
         self.pending_transfers.append(transfer)
         self.arrange_transport(transfer, now)
