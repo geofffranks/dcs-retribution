@@ -150,12 +150,20 @@ class GroundUnitPurchaseAdapter(PurchaseAdapter[GroundUnitType]):
         self.game = game
 
     def buy(self, item: GroundUnitType, quantity: int) -> None:
-        super().buy(item, quantity)
-        self._publish_motorpool_update()
+        pending_before = self.pending_delivery_quantity(item)
+        try:
+            super().buy(item, quantity)
+        finally:
+            if self.pending_delivery_quantity(item) != pending_before:
+                self._publish_motorpool_update()
 
     def sell(self, item: GroundUnitType, quantity: int) -> None:
-        super().sell(item, quantity)
-        self._publish_motorpool_update()
+        pending_before = self.pending_delivery_quantity(item)
+        try:
+            super().sell(item, quantity)
+        finally:
+            if self.pending_delivery_quantity(item) != pending_before:
+                self._publish_motorpool_update()
 
     def _publish_motorpool_update(self) -> None:
         from game.server import EventStream

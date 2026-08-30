@@ -385,6 +385,112 @@ def test_ground_purchase_emits_one_final_motorpool_update(
     assert cp.ground_unit_orders.pending_orders(unit_type) == 1
 
 
+def test_ground_purchase_publishes_partial_mutation_before_later_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed later purchase still publishes its earlier pending-order mutation."""
+    pubs = _patch_event_stream(monkeypatch)
+    from game.purchaseadapter import GroundUnitPurchaseAdapter, TransactionError
+
+    cp = _cp("alpha", with_orders=True)
+    budget = 10000
+    coalition: Any = SimpleNamespace(
+        player=Player.BLUE,
+        budget=budget,
+    )
+
+    def adjust_budget(amount: int) -> None:
+        coalition.budget += amount
+
+    coalition.adjust_budget = adjust_budget
+    game = SimpleNamespace(
+        settings=SimpleNamespace(enable_enemy_buy_sell=False),
+    )
+    sources = iter((True, False))
+    cp.has_ground_unit_source = lambda _g: next(sources)
+    adapter = GroundUnitPurchaseAdapter(
+        cast(Any, cp), cast(Any, coalition), cast(Any, game)
+    )
+    unit_type = _unit_type()
+
+    with pytest.raises(TransactionError):
+        adapter.buy(unit_type, 2)
+
+    assert cp.ground_unit_orders.pending_orders(unit_type) == 1
+    assert coalition.budget == budget - unit_type.price
+    assert len(pubs) == 1
+    assert cp.ground_objects[0] in pubs[0].updated_tgos
+
+
+def test_ground_sell_publishes_partial_cancellation_before_later_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed later sell still publishes its earlier cancellation mutation."""
+    pubs = _patch_event_stream(monkeypatch)
+    from game.purchaseadapter import GroundUnitPurchaseAdapter, TransactionError
+
+    cp = _cp("alpha", with_orders=True)
+    unit_type = _unit_type()
+    cp.ground_unit_orders.order({unit_type: 1})
+    budget = 10000
+    coalition: Any = SimpleNamespace(
+        player=Player.BLUE,
+        budget=budget,
+    )
+
+    def adjust_budget(amount: int) -> None:
+        coalition.budget += amount
+
+    coalition.adjust_budget = adjust_budget
+    game = SimpleNamespace(
+        settings=SimpleNamespace(enable_enemy_buy_sell=False),
+    )
+    adapter = GroundUnitPurchaseAdapter(
+        cast(Any, cp), cast(Any, coalition), cast(Any, game)
+    )
+
+    with pytest.raises(TransactionError):
+        adapter.sell(unit_type, 2)
+
+    assert cp.ground_unit_orders.pending_orders(unit_type) == 0
+    assert coalition.budget == budget + unit_type.price
+    assert len(pubs) == 1
+    assert cp.ground_objects[0] in pubs[0].updated_tgos
+
+
+def test_ground_purchase_validation_failure_does_not_publish(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A purchase rejected before mutation does not publish a stale update."""
+    pubs = _patch_event_stream(monkeypatch)
+    from game.purchaseadapter import GroundUnitPurchaseAdapter, TransactionError
+
+    cp = _cp("alpha", with_orders=True)
+    coalition = SimpleNamespace(
+        player=Player.BLUE,
+        budget=0,
+        adjust_budget=lambda _amount: None,
+    )
+    game = SimpleNamespace(
+        settings=SimpleNamespace(enable_enemy_buy_sell=False),
+    )
+    cp.has_ground_unit_source = lambda _g: True
+    adapter = GroundUnitPurchaseAdapter(
+        cast(Any, cp), cast(Any, coalition), cast(Any, game)
+    )
+    unit_type = _unit_type()
+
+    with pytest.raises(TransactionError):
+        adapter.buy(unit_type, 1)
+
+    assert cp.ground_unit_orders.pending_orders(unit_type) == 0
+    assert pubs == []
+
+    adapter.buy(unit_type, 0)
+
+    assert pubs == []
+
+
 # ---------------------------------------------------------------------------
 # Motorpool mission loss
 # ---------------------------------------------------------------------------
