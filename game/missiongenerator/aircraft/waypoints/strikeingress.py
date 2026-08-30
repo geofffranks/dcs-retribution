@@ -6,6 +6,7 @@ from dcs.planes import B_17G, B_52H, Tu_22M3, B_1B, F_15ESE
 from dcs.point import MovingPoint
 from dcs.task import Bombing, Expend, OptFormation, WeaponType, CarpetBombing
 
+from game.theater.theatergroundobject import MotorpoolGroundObject
 from game.utils import mach, meters
 from .pydcswaypointbuilder import PydcsWaypointBuilder
 
@@ -29,6 +30,8 @@ class StrikeIngressBuilder(PydcsWaypointBuilder):
 
     def add_bombing_tasks(self, waypoint: MovingPoint) -> None:
         targets = self.waypoint.targets
+        if isinstance(self.package.target, MotorpoolGroundObject):
+            targets = self.package.target.strike_targets
         if not targets:
             return
 
