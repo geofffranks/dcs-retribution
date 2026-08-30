@@ -173,6 +173,26 @@ def test_motorpool_tgo_reserve_units_match_popup_display_names(
     assert TgoJs.for_tgo(tgo).reserve_units[0].startswith("2228 |")
 
 
+def test_initial_tgo_serialization_reconciles_new_motorpool_reserve(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Initial /game and /tgos payloads populate caches before reading them."""
+    _patch_latlng(monkeypatch)
+    abrams = next(GroundUnitType.for_dcs_type(Armor.M_1_Abrams))
+    motorpools, cp = _populated_motorpools({abrams: 3}, cap=3)
+    for tgo in motorpools:
+        tgo.groups = []
+        tgo.motorpool_unit_types = {}
+        tgo.motorpool_projection_keys = {}
+
+    payloads = TgoJs.all_in_game(cp.coalition.game)
+
+    assert [len(payload.reserve_units) for payload in payloads] == [3]
+    assert [unit.display_name for unit in motorpools[0].units] == payloads[
+        0
+    ].reserve_units
+
+
 def test_motorpool_tgo_expected_inventory_includes_pending_orders(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -403,6 +403,12 @@ class TransferModel(QAbstractListModel):
     def _transfers_for(self, player: Player) -> PendingTransfers:
         return self.game_model.game.coalition_for(player=player).transfers
 
+    def _is_transfer_authorized(self, transfer: TransferOrder) -> bool:
+        """Whether the UI is allowed to mutate this transfer's ownership."""
+        return transfer.player.is_blue or (
+            transfer.player.is_red and self._compute_red_visible()
+        )
+
     def _all_transfers(self) -> list[TransferOrder]:
         if self.game_model.game is None:
             return []
@@ -458,7 +464,9 @@ class TransferModel(QAbstractListModel):
 
     def new_transfer(self, transfer: TransferOrder, now: datetime) -> None:
         """Updates the game with the new unit transfer."""
-        visible = transfer.player.is_blue or self._red_visible
+        if not self._is_transfer_authorized(transfer):
+            return
+        visible = True
         if visible:
             if transfer.player.is_blue:
                 insert_row = len(self._transfers_for(Player.BLUE).pending_transfers)
@@ -478,6 +486,8 @@ class TransferModel(QAbstractListModel):
 
     def cancel_transfer(self, transfer: TransferOrder) -> None:
         """Cancels the planned unit transfer at the given index."""
+        if not self._is_transfer_authorized(transfer):
+            return
         transfers = self._transfers_for(self.owner_of(transfer))
         index = self._all_transfers().index(transfer)
         self.beginRemoveRows(QModelIndex(), index, index)

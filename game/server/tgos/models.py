@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from game.dcs.groundunittype import GroundUnitType
 from game.ground_forces.ai_ground_planner import reserve_armor_for
-from game.missiongenerator.motorpoolpopulator import _select_capped
+from game.missiongenerator.motorpoolpopulator import MotorpoolPopulator, _select_capped
 from game.server.leaflet import LeafletPoint
 from game.theater.theatergroundobject import MotorpoolGroundObject, ShipGroundObject
 
@@ -83,6 +83,9 @@ class TgoJs(BaseModel):
         unrendered_reserve: list[AggregateGroundUnitEntry] = []
         in_transit_units: list[AggregateGroundUnitEntry] = []
         if isinstance(tgo, MotorpoolGroundObject):
+            MotorpoolPopulator(
+                tgo.control_point.coalition.game
+            ).populate_control_points([tgo.control_point])
             reserve_units = [unit.display_name for unit in tgo.units]
             motorpools = [
                 other

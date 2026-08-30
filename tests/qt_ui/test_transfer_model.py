@@ -357,16 +357,16 @@ def test_armor_recruitment_menu_uses_captured_faction_catalog(
         "get_instance",
         lambda: SimpleNamespace(updateBudget=lambda _game: None),
     )
-    blue_unit = cast(
-        GroundUnitType, MagicMock(display_name="Blue tank", price=5)
-    )
+    blue_unit = cast(GroundUnitType, MagicMock(display_name="Blue tank", price=5))
     red_unit = cast(GroundUnitType, MagicMock(display_name="Red tank", price=5))
     blue_faction = SimpleNamespace(ground_units={blue_unit})
     red_faction = SimpleNamespace(ground_units={red_unit})
     orders = SimpleNamespace(pending_orders=lambda _unit: 0)
     game = SimpleNamespace(
         settings=SimpleNamespace(enable_enemy_buy_sell=True),
-        faction_for=lambda player: blue_faction if player is Player.BLUE else red_faction,
+        faction_for=lambda player: (
+            blue_faction if player is Player.BLUE else red_faction
+        ),
         coalition_for=lambda player: SimpleNamespace(
             faction=blue_faction if player is Player.BLUE else red_faction,
             transfers=SimpleNamespace(),
@@ -539,10 +539,10 @@ def test_red_insert_appends(app: QApplication) -> None:
     assert model.rowCount() == 2
 
 
-def test_hidden_red_insert_mutates_backend_without_row_signal(
+def test_hidden_red_insert_is_rejected_before_any_side_effect(
     app: QApplication, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A hidden RED transfer updates state without announcing a nonexistent row."""
+    """A disabled RED transfer is a complete no-op in the UI model."""
     blue = _make_pending(Player.BLUE)
     red = _make_pending(Player.RED)
     game = _game_with_settings(blue, red, enemy_buy_sell=False)
@@ -561,16 +561,104 @@ def test_hidden_red_insert_mutates_backend_without_row_signal(
     transfer = _transfer(origin, destination, Player.RED)
     model.new_transfer(transfer, datetime.now())
 
-    assert red.pending_transfers == [transfer]
+    assert red.pending_transfers == []
     assert inserts == []
     assert model.rowCount() == 0
-    assert len(published) == 1
-    assert inventory_refreshes == [1]
+    assert published == []
+    assert inventory_refreshes == []
+
+
+def test_neutral_insert_is_rejected_before_any_side_effect(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A neutral transfer is never authorized, even when RED management is enabled."""
+    blue = _make_pending(Player.BLUE)
+    red = _make_pending(Player.RED)
+    game = _game_with_settings(blue, red, enemy_buy_sell=True)
+    model = TransferModel(_game_model(game))
+    inserts: list[tuple[int, int]] = []
+    inventory_refreshes: list[int] = []
+    published: list[GameUpdateEvents] = []
+    cast(Any, model).rowsInserted.connect(
+        lambda parent, first, last: inserts.append((first, last))
+    )
+    model.inventory_changed.connect(lambda: inventory_refreshes.append(1))
+    monkeypatch.setattr("qt_ui.models.EventStream.put_nowait", published.append)
+
+    origin = _cp("Neutral Origin", captured=Player.NEUTRAL)
+    destination = _cp("Neutral Dest", captured=Player.NEUTRAL)
+    transfer = _transfer(origin, destination, Player.NEUTRAL)
+    model.new_transfer(transfer, datetime.now())
+
+    assert blue.pending_transfers == []
+    assert red.pending_transfers == []
+    assert inserts == []
+    assert model.rowCount() == 0
+    assert published == []
+    assert inventory_refreshes == []
 
 
 # ---------------------------------------------------------------------------
 # Removal
 # ---------------------------------------------------------------------------
+
+
+def test_hidden_red_cancel_is_rejected_before_any_side_effect(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A disabled RED transfer cannot be cancelled through the UI model."""
+    blue = _make_pending(Player.BLUE)
+    red = _make_pending(Player.RED)
+    origin = _cp("Red Origin", captured=Player.RED)
+    destination = _cp("Red Dest", captured=Player.RED)
+    transfer = _transfer(origin, destination, Player.RED)
+    red.new_transfer(transfer, datetime.now(), GameUpdateEvents())
+    game = _game_with_settings(blue, red, enemy_buy_sell=False)
+    model = TransferModel(_game_model(game))
+    removals: list[tuple[int, int]] = []
+    inventory_refreshes: list[int] = []
+    published: list[GameUpdateEvents] = []
+    cast(Any, model).rowsRemoved.connect(
+        lambda parent, first, last: removals.append((first, last))
+    )
+    model.inventory_changed.connect(lambda: inventory_refreshes.append(1))
+    monkeypatch.setattr("qt_ui.models.EventStream.put_nowait", published.append)
+
+    model.cancel_transfer(transfer)
+
+    assert red.pending_transfers == [transfer]
+    assert removals == []
+    assert published == []
+    assert inventory_refreshes == []
+
+
+def test_neutral_cancel_is_rejected_before_any_side_effect(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A neutral transfer cannot be cancelled through the UI model."""
+    blue = _make_pending(Player.BLUE)
+    red = _make_pending(Player.RED)
+    origin = _cp("Neutral Origin", captured=Player.NEUTRAL)
+    destination = _cp("Neutral Dest", captured=Player.NEUTRAL)
+    transfer = _transfer(origin, destination, Player.NEUTRAL)
+    game = _game_with_settings(blue, red, enemy_buy_sell=True)
+    model = TransferModel(_game_model(game))
+    removals: list[tuple[int, int]] = []
+    inventory_refreshes: list[int] = []
+    published: list[GameUpdateEvents] = []
+    cast(Any, model).rowsRemoved.connect(
+        lambda parent, first, last: removals.append((first, last))
+    )
+    model.inventory_changed.connect(lambda: inventory_refreshes.append(1))
+    monkeypatch.setattr("qt_ui.models.EventStream.put_nowait", published.append)
+
+    model.cancel_transfer(transfer)
+
+    assert blue.pending_transfers == []
+    assert red.pending_transfers == []
+    assert removals == []
+    assert published == []
+    assert inventory_refreshes == []
 
 
 def test_remove_uses_visible_row(app: QApplication) -> None:
