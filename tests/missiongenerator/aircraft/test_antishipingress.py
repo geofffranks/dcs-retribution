@@ -121,8 +121,11 @@ def _motorpool_target(unit_positions: list[Point]) -> MotorpoolGroundObject:
     target.groups = cast(
         Any,
         [
+            # MotorpoolPopulator reads (but discards) pre-existing groups while
+            # reconciling, so the fake group needs an id like a real TheaterGroup.
             SimpleNamespace(
-                units=[SimpleNamespace(position=p, alive=True) for p in unit_positions]
+                id=0,
+                units=[SimpleNamespace(position=p, alive=True) for p in unit_positions],
             )
         ],
     )

@@ -151,7 +151,7 @@ class ObjectiveFinder:
         Targets are sorted by proximity to friendly control points, matching the
         behavior of :meth:`strike_targets`.
         """
-        from game.theater.theatergroundobject import motorpool_rendered_unit_count
+        from game.missiongenerator.motorpoolpopulator import projected_motorpool_counts
 
         settings = self.game.settings
         if not settings.motorpool_enabled or settings.motorpool_spawn_cap <= 0:
@@ -159,16 +159,16 @@ class ObjectiveFinder:
 
         candidates: list[MotorpoolGroundObject] = []
         for enemy_cp in self.enemy_control_points():
-            for ground_object in enemy_cp.ground_objects:
-                if (
-                    isinstance(ground_object, MotorpoolGroundObject)
-                    and motorpool_rendered_unit_count(
-                        ground_object,
-                        settings.motorpool_enabled,
-                        settings.motorpool_spawn_cap,
-                    )
-                    > 0
-                ):
+            motorpools = [
+                ground_object
+                for ground_object in enemy_cp.ground_objects
+                if isinstance(ground_object, MotorpoolGroundObject)
+            ]
+            projected_counts = projected_motorpool_counts(
+                motorpools, settings.motorpool_spawn_cap
+            )
+            for ground_object in motorpools:
+                if projected_counts.get(ground_object.id, 0) > 0:
                     candidates.append(ground_object)
         yield from self._targets_by_range(candidates)
 

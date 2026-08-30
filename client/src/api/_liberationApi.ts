@@ -467,6 +467,11 @@ export type TacticalOverlay = {
   actual_path?: LatLng[];
   targets: TacticalTarget[];
 };
+export type AggregateGroundUnitEntry = {
+  unit_type: string;
+  display_name: string;
+  count: number;
+};
 export type Tgo = {
   id: string;
   name: string;
@@ -475,11 +480,15 @@ export type Tgo = {
   blue: boolean;
   position: LatLng;
   units: string[];
+  reserve_units?: string[];
+  expected_inventory?: AggregateGroundUnitEntry[];
+  unrendered_reserve?: AggregateGroundUnitEntry[];
+  in_transit_units?: AggregateGroundUnitEntry[];
   threat_ranges: number[];
   detection_ranges: number[];
   dead: boolean;
   sidc: string;
-  task?: string[];
+  task?: [string, string];
   mobile: boolean;
   destination?: LatLng;
 };

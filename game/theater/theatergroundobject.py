@@ -37,7 +37,11 @@ if TYPE_CHECKING:
 def _select_capped(
     reserve: dict[GroundUnitType, int], cap: int
 ) -> dict[GroundUnitType, int]:
-    """Proportionally reduce ``reserve`` to at most ``cap`` units."""
+    """Proportionally reduce ``reserve`` so its counts sum to at most ``cap``,
+    using the largest-remainder method (keeps a representative spread of types).
+    Ties are broken by ``variant_id`` so allocation is deterministic across
+    turns, which the motorpool projection reconciliation relies on. Returns a
+    copy of ``reserve`` unchanged when it already fits under the cap."""
     total = sum(reserve.values())
     if total <= cap:
         return {ut: n for ut, n in reserve.items() if n > 0}
@@ -45,12 +49,13 @@ def _select_capped(
     floors = {ut: int(v) for ut, v in exact.items()}
     remaining = cap - sum(floors.values())
     if remaining > 0:
+        # Largest fractional remainders first, then original count, then
+        # variant_id for a stable, deterministic tie-break.
         by_frac = sorted(
-            ((ut, exact[ut] - floors[ut]) for ut in reserve),
-            key=lambda kv: kv[1],
-            reverse=True,
+            reserve,
+            key=lambda ut: (-(exact[ut] - floors[ut]), -reserve[ut], ut.variant_id),
         )
-        for ut, _frac in by_frac[:remaining]:
+        for ut in by_frac[:remaining]:
             floors[ut] += 1
     return {ut: n for ut, n in floors.items() if n > 0}
 
@@ -726,9 +731,8 @@ class VehicleGroupGroundObject(TheaterGroundObject):
 
 class MotorpoolGroundObject(TheaterGroundObject):
     """A control point's not-deployed reserve armor, rendered as a stationary,
-    strikeable vehicle park. Its .groups are populated ephemerally each mission
-    from the current reserve slice (see MotorpoolPopulator); units are NOT
-    persisted."""
+    strikeable vehicle park. Its groups and projection keys are a persisted cache
+    reconciled from the current reserve slice by MotorpoolPopulator."""
 
     def __init__(
         self,
@@ -746,22 +750,11 @@ class MotorpoolGroundObject(TheaterGroundObject):
             task=task,
         )
         # group-id -> the exact GroundUnitType variant that group represents, so
-        # the renderer decrements the right base.armor key. Set by the populator;
-        # never persisted meaningfully (groups are rebuilt each mission).
+        # the renderer decrements the right base.armor key.
         self.motorpool_unit_types: dict[int, GroundUnitType] = {}
-
-    def __getstate__(self) -> dict[str, Any]:
-        state = super().__getstate__()
-        # Reserve vehicles are rendered per mission from the current base reserve;
-        # never persist their generated groups or the renderer's lookup map.
-        state["groups"] = []
-        state["motorpool_unit_types"] = {}
-        return state
-
-    def __setstate__(self, state: dict[str, Any]) -> None:
-        state["groups"] = []
-        state["motorpool_unit_types"] = {}
-        super().__setstate__(state)
+        # unit-id -> stable desired-projection key. Persisted with groups so an
+        # unchanged reconciliation preserves object identity and campaign IDs.
+        self.motorpool_projection_keys: dict[int, tuple[uuid.UUID, str, int]] = {}
 
     @property
     def symbol_set_and_entity(self) -> tuple[SymbolSet, Entity]:
@@ -771,6 +764,13 @@ class MotorpoolGroundObject(TheaterGroundObject):
             SymbolSet.LAND_INSTALLATIONS,
             LandInstallationEntity.MAINTENANCE_FACILITY,
         )
+
+    def mission_types(self, for_player: Player) -> Iterator[FlightType]:
+        from game.ato import FlightType
+
+        if not self.is_friendly(for_player):
+            yield FlightType.BAI
+        yield from super().mission_types(for_player)
 
     @property
     def capturable(self) -> bool:
@@ -786,27 +786,21 @@ class MotorpoolGroundObject(TheaterGroundObject):
         # Parked/unmanned: never advances to the front.
         return False
 
-    def mission_types(self, for_player: Player) -> Iterator[FlightType]:
-        from game.ato import FlightType
-
-        if not self.is_friendly(for_player):
-            yield FlightType.BAI
-        yield from super().mission_types(for_player)
-
     @property
     def sidc_status(self) -> Status:
-        # A motorpool is a live reserve projection: empty on the strategic map is its
-        # normal resting state (vehicles populate ephemerally at mission-gen), not
-        # destruction. Always render as a present depot — never damaged/destroyed.
+        # A motorpool is a live reserve projection: empty is a valid disabled or
+        # zero-reserve state, not destruction. Always render as a present depot —
+        # never damaged/destroyed.
         # is_dead is deliberately left intact so AI target-selection, capture, and
         # IADS logic (which read is_dead, not sidc_status) are unaffected.
         return Status.PRESENT
 
     def clear(self) -> None:
-        # Keep the group-id -> unit-type map in lockstep with groups so a wiped
-        # motorpool (e.g. on capture) leaves no dangling group-id keys behind.
+        # Keep persisted projection metadata in lockstep with groups so a wiped
+        # motorpool (e.g. on capture) leaves no dangling keys behind.
         super().clear()
         self.motorpool_unit_types = {}
+        self.motorpool_projection_keys = {}
 
 
 class EwrGroundObject(IadsGroundObject):

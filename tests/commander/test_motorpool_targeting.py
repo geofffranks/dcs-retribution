@@ -80,32 +80,6 @@ def _friendly_cp() -> ControlPoint:
 # --- ObjectiveFinder.motorpool_targets ---------------------------------------
 
 
-def test_motorpool_targets_uses_neutral_projection_interface(
-    monkeypatch: Any,
-) -> None:
-    gut = _gut()
-    target, enemy_cp = _motorpool_cp({gut: 4}, friendly=False)
-    game = _game([enemy_cp, _friendly_cp()])
-    calls: list[tuple[MotorpoolGroundObject, bool, int]] = []
-
-    def projected_count(
-        tgo: MotorpoolGroundObject, enabled: bool, spawn_cap: int
-    ) -> int:
-        calls.append((tgo, enabled, spawn_cap))
-        return 1
-
-    monkeypatch.setattr(
-        "game.theater.theatergroundobject.motorpool_rendered_unit_count",
-        projected_count,
-        raising=False,
-    )
-
-    assert list(
-        ObjectiveFinder(cast("Game", game), Player.BLUE).motorpool_targets()
-    ) == [target]
-    assert calls == [(target, True, 10)]
-
-
 def test_motorpool_targets_yields_enemy_motorpool_with_reserve() -> None:
     gut = _gut()
     enemy_tgo, enemy_cp = _motorpool_cp({gut: 4}, friendly=False)
@@ -246,6 +220,30 @@ def test_motorpool_targets_sorted_nearest_first() -> None:
     game = _game([far_cp, near_cp, _friendly_cp()])
     targets = list(ObjectiveFinder(cast("Game", game), Player.BLUE).motorpool_targets())
     assert targets == [near_tgo, far_tgo]
+
+
+def test_motorpool_targeting_matches_shared_projection_across_tgos() -> None:
+    gut = _gut()
+    primary, cp = _motorpool_cp({gut: 1}, friendly=False)
+    secondary = MotorpoolGroundObject(
+        "CP Motorpool 1",
+        PresetLocation(
+            "secondary",
+            Point(100.0, 0.0, MagicMock(spec=Terrain)),
+            Heading.from_degrees(0.0),
+        ),
+        cp,
+        GroupTask.MOTORPOOL,
+    )
+    secondary.distance_to = MagicMock(return_value=100.0)  # type: ignore[method-assign]
+    cp.ground_objects = [primary, secondary]
+    game = _game([cp, _friendly_cp()], cap=10)
+    cp.coalition.game = game
+
+    targets = list(ObjectiveFinder(cast("Game", game), Player.BLUE).motorpool_targets())
+
+    assert targets == [primary]
+    assert PlanMotorpoolAttack(secondary)._rendered_unit_count() == 0
 
 
 # --- PlanMotorpoolAttack ------------------------------------------------------

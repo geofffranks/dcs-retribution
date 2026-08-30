@@ -32,13 +32,16 @@ class PlanMotorpoolAttack(PackagePlanningTask[MotorpoolGroundObject]):
     def _rendered_unit_count(self) -> int:
         """How many vehicles this motorpool will render this turn (0 when nothing
         will spawn, so the planner proposes no attack flight)."""
-        from game.theater.theatergroundobject import motorpool_rendered_unit_count
+        from game.missiongenerator.motorpoolpopulator import projected_motorpool_counts
 
         settings = self.target.control_point.coalition.game.settings
         if settings.motorpool_spawn_cap <= 0 or not settings.motorpool_enabled:
             return 0
-        return motorpool_rendered_unit_count(
-            self.target,
-            motorpool_enabled=settings.motorpool_enabled,
-            spawn_cap=settings.motorpool_spawn_cap,
+        motorpools = [
+            ground_object
+            for ground_object in self.target.control_point.ground_objects
+            if isinstance(ground_object, MotorpoolGroundObject)
+        ]
+        return projected_motorpool_counts(motorpools, settings.motorpool_spawn_cap).get(
+            self.target.id, 0
         )
