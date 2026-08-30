@@ -448,6 +448,7 @@ class TransferModel(QAbstractListModel):
             if transfer.player.is_blue
             else self.rowCount()
         )
+        transfers.validate_transfer(transfer)
         self.beginInsertRows(QModelIndex(), insert_row, insert_row)
         # TODO: Needs to regenerate base inventory tab.
         transfers.new_transfer(transfer, now)

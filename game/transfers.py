@@ -161,6 +161,13 @@ class TransferOrder:
         return self.destination == self.position or not self.size
 
     def disband_at(self, location: ControlPoint) -> None:
+        if not location.is_friendly(self.player):
+            logging.info(
+                f"Cannot disband units at {location}: it is not friendly to "
+                f"{self.player}. Units were destroyed during transfer."
+            )
+            self.kill_all()
+            return
         logging.info(f"Units halting at {location}.")
         location.base.commission_units(self.units)
         self.units.clear()
@@ -402,9 +409,7 @@ class MultiGroupTransport(MissionTarget, Transport):
         self.transfers: List[TransferOrder] = []
 
     def is_friendly(self, to_player: Player) -> bool:
-        if self.origin.captured == to_player:
-            return True
-        return False
+        return self.player_owned == to_player
 
     def add_units(self, transfer: TransferOrder) -> None:
         self.transfers.append(transfer)
@@ -464,7 +469,7 @@ class MultiGroupTransport(MissionTarget, Transport):
 
     @property
     def coalition(self) -> Coalition:
-        return self.origin.coalition
+        return self.origin.coalition.game.coalition_for(self.player_owned)
 
 
 class Convoy(MultiGroupTransport):
@@ -630,7 +635,7 @@ class PendingTransfers:
         return self.pending_transfers.index(transfer)
 
     def network_for(self, control_point: ControlPoint) -> TransitNetwork:
-        return self.game.transit_network_for(control_point.captured)
+        return self.game.transit_network_for(self.player)
 
     def arrange_transport(self, transfer: TransferOrder, now: datetime) -> None:
         network = self.network_for(transfer.position)
@@ -651,7 +656,7 @@ class PendingTransfers:
             next_stop = transfer.destination
         AirliftPlanner(self.game, transfer, next_stop).create_package_for_airlift(now)
 
-    def new_transfer(self, transfer: TransferOrder, now: datetime) -> None:
+    def validate_transfer(self, transfer: TransferOrder) -> None:
         assert (
             transfer.player == self.player
         ), "Transfer ownership does not match the collection's player"
@@ -665,6 +670,9 @@ class PendingTransfers:
             )
         network = self.network_for(transfer.position)
         network.shortest_path_between(transfer.position, transfer.destination)
+
+    def new_transfer(self, transfer: TransferOrder, now: datetime) -> None:
+        self.validate_transfer(transfer)
         transfer.origin.base.commit_losses(transfer.units)
         self.pending_transfers.append(transfer)
         self.arrange_transport(transfer, now)
@@ -740,7 +748,7 @@ class PendingTransfers:
         if transfer.transport is not None:
             self.cancel_transport(transfer.transport, transfer)
         self.pending_transfers.remove(transfer)
-        transfer.origin.base.commission_units(transfer.units)
+        transfer.disband()
         self._send_supply_route_event_stream_update()
 
     def perform_transfers(self) -> None:

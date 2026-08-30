@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime
 from types import SimpleNamespace
+import typing
 from typing import Any, cast
 from unittest.mock import MagicMock
 
@@ -151,6 +153,7 @@ def test_red_transfer_model_maps_rows_and_cancels_red_transfer() -> None:
     blue_transfers.cancel_transfer.assert_not_called()
 
 
+@typing.no_type_check
 def test_legacy_boolean_transfer_owner_is_preserved_and_validated() -> None:
     transfer = SimpleNamespace(player=True)
     blue_coalition = SimpleNamespace(player=Player.BLUE)
@@ -166,6 +169,7 @@ def test_legacy_boolean_transfer_owner_is_preserved_and_validated() -> None:
         Migrator._normalize_single_transfer_player(transfer, blue_coalition)
 
 
+@typing.no_type_check
 def test_red_transfer_rejects_cross_coalition_destination() -> None:
     unit_type = cast(Any, MagicMock())
     origin = cast(
@@ -187,6 +191,7 @@ def test_red_transfer_rejects_cross_coalition_destination() -> None:
     assert pending.pending_transfers == []
 
 
+@typing.no_type_check
 def test_red_transfer_rejects_invalid_route_before_committing_origin_losses() -> None:
     unit_type = cast(Any, MagicMock())
     origin = cast(
@@ -209,7 +214,11 @@ def test_red_transfer_rejects_invalid_route_before_committing_origin_losses() ->
     )
     origin.base.commission_units({unit_type: 2})
     pending = PendingTransfers(cast(Any, SimpleNamespace()), Player.RED)
-    pending.network_for = lambda _cp: TransitNetwork()
+    invalid_network = TransitNetwork()
+    invalid_network.shortest_path_between = lambda _origin, _destination: (
+        _ for _ in ()
+    ).throw(ValueError())
+    pending.network_for = lambda _cp: invalid_network
     transfer = TransferOrder(origin, destination, {unit_type: 1}, player=Player.RED)
 
     with pytest.raises(ValueError):
@@ -219,6 +228,7 @@ def test_red_transfer_rejects_invalid_route_before_committing_origin_losses() ->
     assert pending.pending_transfers == []
 
 
+@typing.no_type_check
 def test_red_transfer_destination_combo_uses_red_friendly_points(
     app: QApplication,
 ) -> None:
@@ -229,6 +239,7 @@ def test_red_transfer_destination_combo_uses_red_friendly_points(
             name="red destination",
             captured=Player.RED,
             can_deploy_ground_units=True,
+            is_friendly=lambda to_player: red_destination.captured == to_player,
         ),
     )
     blue_destination = cast(
@@ -237,6 +248,7 @@ def test_red_transfer_destination_combo_uses_red_friendly_points(
             name="blue destination",
             captured=Player.BLUE,
             can_deploy_ground_units=True,
+            is_friendly=lambda to_player: blue_destination.captured == to_player,
         ),
     )
     neutral_destination = cast(
@@ -245,6 +257,7 @@ def test_red_transfer_destination_combo_uses_red_friendly_points(
             name="neutral destination",
             captured=Player.NEUTRAL,
             can_deploy_ground_units=True,
+            is_friendly=lambda to_player: neutral_destination.captured == to_player,
         ),
     )
     game = cast(
@@ -267,8 +280,9 @@ def test_red_transfer_destination_combo_uses_red_friendly_points(
     assert [combo.itemData(i) for i in range(combo.count())] == [red_destination]
 
 
+@typing.no_type_check
 def test_red_transfer_grid_uses_red_faction_units(app: QApplication) -> None:
-    unit_type = cast(Any, SimpleNamespace(display_name="Red tank"))
+    unit_type = cast(Any, MagicMock(display_name="Red tank"))
     origin = cast(
         Any,
         SimpleNamespace(
@@ -293,6 +307,7 @@ def test_red_transfer_grid_uses_red_faction_units(app: QApplication) -> None:
     assert any(label.text() == "<b>Red tank</b>" for label in grid.findChildren(QLabel))
 
 
+@typing.no_type_check
 def test_red_base_menu_budget_uses_captured_coalition() -> None:
     menu = QBaseMenu2.__new__(QBaseMenu2)
     menu.cp = SimpleNamespace(captured=Player.RED)
@@ -305,6 +320,124 @@ def test_red_base_menu_budget_uses_captured_coalition() -> None:
     )
     menu.budget_display.setText.assert_called_once()
     assert "20" in menu.budget_display.setText.call_args.args[0]
+
+
+@typing.no_type_check
+def test_capture_then_cancel_does_not_refund_units_to_enemy_owned_origin() -> None:
+    unit_type = cast(Any, object())
+    origin = cast(
+        Any,
+        SimpleNamespace(
+            name="Red origin",
+            captured=Player.RED,
+            base=Base(),
+            position=object(),
+            is_friendly=lambda player: origin.captured == player,
+        ),
+    )
+    destination = cast(
+        Any,
+        SimpleNamespace(
+            name="Red destination", captured=Player.RED, base=Base(), position=object()
+        ),
+    )
+    origin.base.commission_units({unit_type: 1})
+    pending = PendingTransfers(cast(Any, SimpleNamespace()), Player.RED)
+    transfer = TransferOrder(origin, destination, {unit_type: 1}, player=Player.RED)
+    origin.base.commit_losses(transfer.units)
+    pending.pending_transfers.append(transfer)
+    pending._send_supply_route_event_stream_update = lambda: None
+
+    origin.captured = Player.BLUE
+    pending.cancel_transfer(transfer)
+
+    assert origin.base.total_units_of_type(unit_type) == 0
+    assert transfer.units == {}
+
+
+@typing.no_type_check
+def test_transfer_routing_uses_owner_after_origin_is_captured() -> None:
+    origin = cast(
+        Any,
+        SimpleNamespace(name="Origin", captured=Player.RED, position=object()),
+    )
+    destination = cast(
+        Any,
+        SimpleNamespace(name="Destination", captured=Player.BLUE, position=object()),
+    )
+    blue_network = object()
+    red_network = object()
+    game = SimpleNamespace(
+        transit_network_for=lambda player: (
+            blue_network if player is Player.BLUE else red_network
+        )
+    )
+    pending = PendingTransfers(cast(Any, game), Player.BLUE)
+    transfer = TransferOrder(origin, destination, {}, player=Player.BLUE)
+
+    assert pending.network_for(transfer.position) is blue_network
+
+
+@typing.no_type_check
+def test_transport_identity_uses_contained_transfer_owner_after_capture() -> None:
+    blue_coalition = object()
+    game = SimpleNamespace(
+        coalition_for=lambda player: (
+            blue_coalition if player is Player.BLUE else object()
+        )
+    )
+    origin = cast(
+        Any,
+        SimpleNamespace(
+            captured=Player.BLUE,
+            position=object(),
+            coalition=SimpleNamespace(game=game),
+        ),
+    )
+    destination = cast(Any, SimpleNamespace(position=object()))
+    transfer = TransferOrder(origin, destination, {}, player=Player.BLUE)
+    convoy = MultiGroupTransport("Convoy", origin, destination)
+    convoy.add_units(transfer)
+
+    origin.captured = Player.RED
+
+    assert convoy.is_friendly(Player.BLUE)
+    assert convoy.coalition is blue_coalition
+
+
+def test_transfer_model_does_not_begin_insert_for_rejected_transfer(
+    app: QApplication,
+) -> None:
+    unit_type = cast(Any, object())
+    origin = cast(
+        Any,
+        SimpleNamespace(name="Red origin", captured=Player.RED, base=Base()),
+    )
+    destination = cast(
+        Any,
+        SimpleNamespace(name="Blue destination", captured=Player.BLUE, base=Base()),
+    )
+    red_transfers = PendingTransfers(cast(Any, SimpleNamespace()), Player.RED)
+    blue_transfers = PendingTransfers(cast(Any, SimpleNamespace()), Player.BLUE)
+    game = SimpleNamespace(
+        settings=SimpleNamespace(enable_enemy_buy_sell=True),
+        coalition_for=lambda player: SimpleNamespace(
+            transfers=red_transfers if player is Player.RED else blue_transfers
+        ),
+    )
+    model = TransferModel(cast(Any, SimpleNamespace(game=game)))
+    transfer = TransferOrder(origin, destination, {unit_type: 1}, player=Player.RED)
+    about_to_insert = []
+    inserted = []
+    model.rowsAboutToBeInserted.connect(lambda: about_to_insert.append(True))
+    model.rowsInserted.connect(lambda: inserted.append(True))
+
+    with pytest.raises(ValueError, match="destination"):
+        model.new_transfer(transfer, SimpleNamespace())
+
+    assert about_to_insert == []
+    assert inserted == []
+    assert red_transfers.pending_transfers == []
 
 
 def test_red_transfer_model_rejects_mutation_when_cheat_is_disabled() -> None:
