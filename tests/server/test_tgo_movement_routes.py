@@ -1,3 +1,4 @@
+from datetime import datetime
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import uuid4
@@ -18,6 +19,7 @@ from game.sim import GameUpdateEvents
 from game.theater.base import Base
 from game.theater.controlpoint import ControlPoint, OffMapSpawn, Player
 from game.theater.presetlocation import PresetLocation
+from game.transfers import PendingTransfers, TransferOrder
 from game.theater.theatergroundobject import (
     MotorpoolGroundObject,
     SamGroundObject,
@@ -144,6 +146,7 @@ def _populated_motorpools(
         settings=SimpleNamespace(motorpool_enabled=True, motorpool_spawn_cap=cap),
         next_unit_id=next_unit_id,
         next_group_id=next_group_id,
+        coalitions=[coalition],
     )
     coalition.game = game
     MotorpoolPopulator(cast(Any, game)).populate()
@@ -260,6 +263,49 @@ def test_motorpool_aggregate_inventory_uses_primary_marker_once(
     assert [entry.dict() for entry in first.in_transit_units] == expected_transit
     assert second.unrendered_reserve == []
     assert second.in_transit_units == []
+
+
+def test_motorpool_in_transit_units_survive_origin_capture(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Queued transfers remain visible after their origin changes coalition."""
+    _patch_latlng(monkeypatch)
+    abrams = next(GroundUnitType.for_dcs_type(Armor.M_1_Abrams))
+    motorpools, origin = _populated_motorpools({abrams: 2}, cap=2)
+    game = origin.coalition.game
+
+    blue_transfers = PendingTransfers.__new__(PendingTransfers)
+    blue_transfers.game = game
+    blue_transfers.player = Player.BLUE
+    blue_transfers.pending_transfers = []
+    cast(Any, blue_transfers).arrange_transport = lambda _transfer, _now, _events: None
+    red_transfers = PendingTransfers.__new__(PendingTransfers)
+    red_transfers.game = game
+    red_transfers.player = Player.RED
+    red_transfers.pending_transfers = []
+    cast(Any, red_transfers).arrange_transport = lambda _transfer, _now, _events: None
+    blue_coalition = SimpleNamespace(
+        game=game, player=Player.BLUE, transfers=blue_transfers
+    )
+    red_coalition = SimpleNamespace(
+        game=game, player=Player.RED, transfers=red_transfers
+    )
+    game.coalitions = [blue_coalition, red_coalition]
+    origin.coalition = blue_coalition
+    destination = SimpleNamespace(name="destination")
+    transfer = TransferOrder(
+        origin, cast(Any, destination), {abrams: 1}, player=Player.BLUE
+    )
+    origin.base.commit_losses = lambda _units: None
+    blue_transfers.new_transfer(transfer, datetime.now())
+
+    origin.captured = Player.RED
+    origin.coalition = red_coalition
+
+    transit = TgoJs.for_tgo(motorpools[0]).in_transit_units
+    assert [(entry.unit_type, entry.count) for entry in transit] == [
+        (abrams.variant_id, 1)
+    ]
 
 
 def test_new_transfer_emits_motorpool_tgo_update(

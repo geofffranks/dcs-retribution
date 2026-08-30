@@ -102,11 +102,12 @@ class TgoJs(BaseModel):
                     }
                 )
                 transit: defaultdict[GroundUnitType, int] = defaultdict(int)
-                for transfer in tgo.control_point.coalition.transfers:
-                    if transfer.origin != tgo.control_point:
-                        continue
-                    for unit_type, count in transfer.units.items():
-                        transit[unit_type] += count
+                for coalition in tgo.control_point.coalition.game.coalitions:
+                    for transfer in coalition.transfers:
+                        if transfer.origin != tgo.control_point:
+                            continue
+                        for unit_type, count in transfer.units.items():
+                            transit[unit_type] += count
                 in_transit_units = TgoJs._aggregate_entries(dict(transit))
         return TgoJs(
             id=tgo.id,

@@ -100,7 +100,7 @@ class TransferOptionsPanel(QVBoxLayout):
         return self.source_combo_box.currentIndexChanged
 
     @property
-    def current(self) -> ControlPoint:
+    def current(self) -> ControlPoint | None:
         return self.source_combo_box.currentData()
 
     @property
@@ -294,6 +294,7 @@ class NewUnitTransferDialog(QDialog):
         self.setLayout(layout)
 
         self.dest_panel = TransferOptionsPanel(game_model.game, origin)
+        self.dest_panel.changed.connect(self.on_transfer_quantity_changed)
         layout.addLayout(self.dest_panel)
 
         self.transfer_panel = ScrollingUnitTransferGrid(origin, game_model)
@@ -309,10 +310,13 @@ class NewUnitTransferDialog(QDialog):
         layout.addWidget(self.submit_button)
 
     def on_submit(self) -> None:
+        destination = self.dest_panel.current
+        if destination is None:
+            return
         submit_transfer(
             self.game_model,
             self.origin,
-            self.dest_panel.current,
+            destination,
             self.transfer_panel.transfers,
             self.game_model.sim_controller.current_time_in_sim,
             request_airlift=self.dest_panel.request_airlift,
@@ -321,4 +325,6 @@ class NewUnitTransferDialog(QDialog):
 
     def on_transfer_quantity_changed(self) -> None:
         has_transfer_items = any(self.transfer_panel.transfers.values())
-        self.submit_button.setDisabled(not has_transfer_items)
+        self.submit_button.setDisabled(
+            not has_transfer_items or self.dest_panel.current is None
+        )

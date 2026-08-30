@@ -16,7 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from PySide6.QtCore import QModelIndex, QObject, Signal
-from PySide6.QtWidgets import QApplication, QGridLayout
+from PySide6.QtWidgets import QApplication, QGridLayout, QPushButton
 
 from game.settings import Settings
 from game.sim.gameupdateevents import GameUpdateEvents
@@ -27,6 +27,7 @@ from game.transfers import (
     TransferOrder,
 )
 from qt_ui.models import TransferModel
+from qt_ui.windows.basemenu.NewUnitTransferDialog import NewUnitTransferDialog
 from qt_ui.windows.basemenu.UnitTransactionFrame import UnitTransactionFrame
 from qt_ui.windows.settings.QSettingsWindow import QSettingsWidget
 
@@ -645,6 +646,32 @@ def test_settings_load_enqueues_all_motorpool_control_points(
 
     assert len(published) == 1
     assert updated_at == [(published[0], (first, second))]
+
+
+def test_transfer_submit_requires_eligible_destination(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Selected units cannot be submitted when no destination is available."""
+    submitted: list[Any] = []
+    monkeypatch.setattr(
+        "qt_ui.windows.basemenu.NewUnitTransferDialog.submit_transfer",
+        lambda *args, **kwargs: submitted.append((args, kwargs)),
+    )
+    monkeypatch.setattr(NewUnitTransferDialog, "close", lambda _self: None)
+    dialog = NewUnitTransferDialog.__new__(NewUnitTransferDialog)
+    cast(Any, dialog).submit_button = QPushButton()
+    cast(Any, dialog).transfer_panel = SimpleNamespace(transfers={"tank": 1})
+    cast(Any, dialog).dest_panel = SimpleNamespace(current=None, request_airlift=False)
+    cast(Any, dialog).game_model = SimpleNamespace(
+        sim_controller=SimpleNamespace(current_time_in_sim=0)
+    )
+    cast(Any, dialog).origin = object()
+
+    dialog.on_transfer_quantity_changed()
+    dialog.on_submit()
+
+    assert dialog.submit_button.isEnabled() is False
+    assert submitted == []
 
 
 def test_cancelled_settings_load_emits_no_settings_applied(
