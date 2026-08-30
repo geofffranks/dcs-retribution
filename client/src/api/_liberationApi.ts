@@ -476,7 +476,7 @@ export type Tgo = {
   detection_ranges: number[];
   dead: boolean;
   sidc: string;
-  task?: string[];
+  task?: [string, string];
   mobile: boolean;
   destination?: LatLng;
 };

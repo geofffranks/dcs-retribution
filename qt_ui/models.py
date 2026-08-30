@@ -466,7 +466,9 @@ class TransferModel(QAbstractListModel):
         """Updates the game with the new unit transfer."""
         if not self._is_transfer_authorized(transfer):
             return
-        visible = True
+        visible = transfer.player.is_blue or (
+            transfer.player.is_red and self._red_visible
+        )
         if visible:
             if transfer.player.is_blue:
                 insert_row = len(self._transfers_for(Player.BLUE).pending_transfers)

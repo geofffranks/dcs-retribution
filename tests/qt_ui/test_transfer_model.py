@@ -420,7 +420,7 @@ def test_armor_recruitment_menu_uses_captured_faction_catalog(
     cp = SimpleNamespace(
         captured=Player.RED,
         ground_unit_orders=orders,
-        base=SimpleNamespace(total_units_of_type=lambda _unit: 0),
+        base=SimpleNamespace(total_units_of_type=lambda _unit: 3),
         has_ground_unit_source=lambda _game: True,
     )
     game_model = SimpleNamespace(game=game, transfer_model=FakeTransferModel())
@@ -428,6 +428,7 @@ def test_armor_recruitment_menu_uses_captured_faction_catalog(
     menu = QArmorRecruitmentMenu(cast(Any, cp), cast(Any, game_model))
 
     assert set(menu.purchase_groups) == {red_unit}
+    assert menu.purchase_groups[red_unit].sell_button.isHidden()
 
 
 # ---------------------------------------------------------------------------
@@ -548,6 +549,32 @@ def test_blue_insert_precedes_visible_red_rows(app: QApplication) -> None:
     assert (
         model.transfer_at_index(model.index(1, 0, QModelIndex())).player is Player.RED
     )
+
+
+def test_authorized_red_insert_uses_snapshot_visibility(
+    app: QApplication,
+) -> None:
+    """An authorized RED transfer inserts only when RED rows are in the model."""
+    blue = _make_pending(Player.BLUE)
+    red = _make_pending(Player.RED)
+    game = _game_with_settings(blue, red, enemy_buy_sell=False)
+    model = TransferModel(_game_model(game))
+    inserts: list[tuple[int, int]] = []
+    cast(Any, model).rowsInserted.connect(
+        lambda parent, first, last: inserts.append((first, last))
+    )
+
+    # Authorization is live, while the row list is a visibility snapshot until
+    # sync_game_and_visibility is called.
+    game.settings.enable_enemy_buy_sell = True
+    origin = _cp("Red Origin", captured=Player.RED)
+    destination = _cp("Red Dest", captured=Player.RED)
+    transfer = _transfer(origin, destination, Player.RED)
+    model.new_transfer(transfer, datetime.now())
+
+    assert red.pending_transfers == [transfer]
+    assert inserts == []
+    assert model.rowCount() == 0
 
 
 def test_red_insert_appends(app: QApplication) -> None:
