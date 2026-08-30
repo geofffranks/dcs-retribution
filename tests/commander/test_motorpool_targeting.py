@@ -9,13 +9,17 @@ from dcs.terrain import Terrain
 from dcs.vehicles import Armor
 
 from game.ato.flighttype import FlightType
+from game.ato.flightwaypoint import FlightWaypoint
 from game.ato.flightwaypointtype import FlightWaypointType
 from game.commander.objectivefinder import ObjectiveFinder
 from game.commander.tasks.compound.attackbattlepositions import AttackBattlePositions
 from game.commander.tasks.primitive.motorpool import PlanMotorpoolAttack
 from game.ato.flightplans.armedrecon import Builder as ArmedReconBuilder
-from game.ato.flightplans.formationattack import FormationAttackLayout
-from game.ato.flightplans.strike import Builder as StrikeBuilder
+from game.ato.flightplans.formationattack import (
+    FormationAttackBuilder,
+    FormationAttackLayout,
+)
+from game.ato.flightplans.strike import Builder as StrikeBuilder, StrikeFlightPlan
 from game.ato.flightplans.waypointbuilder import StrikeTarget
 from game.data.groups import GroupTask
 from game.dcs.groundunittype import GroundUnitType
@@ -48,7 +52,7 @@ def _motorpool_cp(
     )
     tgo = MotorpoolGroundObject(f"{name} Motorpool 0", loc, cp, GroupTask.MOTORPOOL)
     if reserve_total := sum(reserve.values()):
-        tgo.groups = [SimpleNamespace(alive_units=reserve_total, units=[])]
+        tgo.groups = cast(Any, [SimpleNamespace(alive_units=reserve_total, units=[])])
     tgo.distance_to = MagicMock(return_value=100.0)  # type: ignore[method-assign]
     cp.ground_objects = [tgo]
     return tgo, cp
@@ -99,14 +103,35 @@ def test_motorpool_targets_excludes_motorpool_with_no_reserve() -> None:
     )
 
 
+def test_motorpool_targets_projects_pre_render_reserve() -> None:
+    gut = _gut()
+    target, enemy_cp = _motorpool_cp({gut: 4}, friendly=False)
+    target.groups = []
+    game = _game([enemy_cp, _friendly_cp()])
+
+    assert list(
+        ObjectiveFinder(cast("Game", game), Player.BLUE).motorpool_targets()
+    ) == [target]
+
+
+def test_motorpool_targets_excludes_dead_only_groups() -> None:
+    gut = _gut()
+    target, enemy_cp = _motorpool_cp({gut: 4}, friendly=False)
+    cast(Any, target.groups[0]).alive_units = 0
+    game = _game([enemy_cp, _friendly_cp()])
+
+    assert (
+        list(ObjectiveFinder(cast("Game", game), Player.BLUE).motorpool_targets()) == []
+    )
+
+
 def test_motorpool_targets_use_rendered_units_even_when_setting_disabled() -> None:
     gut = _gut()
     target, enemy_cp = _motorpool_cp({gut: 4}, friendly=False)
     game = _game([enemy_cp, _friendly_cp()], enabled=False)
-    assert (
-        list(ObjectiveFinder(cast("Game", game), Player.BLUE).motorpool_targets())
-        == [target]
-    )
+    assert list(
+        ObjectiveFinder(cast("Game", game), Player.BLUE).motorpool_targets()
+    ) == [target]
 
 
 def test_motorpool_targets_sorted_nearest_first() -> None:
@@ -133,7 +158,9 @@ def _motorpool_target(reserve_count: int) -> MotorpoolGroundObject:
     settings.fpa_2ship_weight = 1
     settings.fpa_3ship_weight = 0
     settings.fpa_4ship_weight = 0
-    tgo.groups = [SimpleNamespace(alive_units=reserve_count, units=[SimpleNamespace()])]
+    tgo.groups = cast(
+        Any, [SimpleNamespace(alive_units=reserve_count, units=[SimpleNamespace()])]
+    )
     return tgo
 
 
@@ -191,6 +218,63 @@ def test_motorpool_attack_precondition_fails_when_no_rendered_units() -> None:
     state = SimpleNamespace(motorpool_targets=[tgo])
     task = PlanMotorpoolAttack(tgo)
     assert task.preconditions_met(state) is False  # type: ignore[arg-type]
+
+
+def test_manual_motorpool_strike_keeps_target_area_waypoint_when_empty(
+    monkeypatch: Any,
+) -> None:
+    target, _cp = _motorpool_cp({}, friendly=False)
+    terrain = MagicMock(spec=Terrain)
+    package_waypoints = SimpleNamespace(
+        join=FlightWaypoint("JOIN", FlightWaypointType.JOIN, Point(0, 0, terrain)),
+        ingress=FlightWaypoint(
+            "INGRESS", FlightWaypointType.INGRESS_STRIKE, Point(0, 0, terrain)
+        ),
+        split=Point(0, 0, terrain),
+    )
+    package = SimpleNamespace(target=target, waypoints=package_waypoints)
+    flight = cast(
+        Any,
+        SimpleNamespace(
+            package=package,
+            flight_type=FlightType.STRIKE,
+            is_helo=False,
+            departure=SimpleNamespace(position=object()),
+            arrival=SimpleNamespace(position=object()),
+            divert=None,
+        ),
+    )
+    builder = cast(Any, object.__new__(StrikeBuilder))
+    builder.flight = flight
+    builder._hold_point = lambda: object()
+    builder._get_split = lambda: object()
+    builder._build_refuel = lambda _builder: None
+
+    class FakeWaypointBuilder:
+        def __init__(self, _flight: object, _targets: object) -> None:
+            self.get_combat_altitude = object()
+
+        def __getattr__(self, _name: str) -> Any:
+            def build_waypoint(*_args: object) -> Any:
+                return SimpleNamespace(
+                    position=target.position,
+                    waypoint_type=FlightWaypointType.TARGET_GROUP_LOC,
+                )
+
+            return build_waypoint
+
+    monkeypatch.setattr(
+        "game.ato.flightplans.formationattack.WaypointBuilder", FakeWaypointBuilder
+    )
+
+    layout = builder.layout()
+
+    assert len(layout.targets) == 1
+    assert layout.targets[0].waypoint_type == FlightWaypointType.TARGET_GROUP_LOC
+    plan = StrikeFlightPlan.__new__(StrikeFlightPlan)
+    plan.flight = flight
+    plan.layout = layout
+    assert plan.tot_waypoint is layout.targets[0]
 
 
 def test_motorpool_armed_recon_uses_target_area_waypoint() -> None:

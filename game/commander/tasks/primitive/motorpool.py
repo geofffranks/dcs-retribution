@@ -49,4 +49,13 @@ class PlanMotorpoolAttack(PackagePlanningTask[MotorpoolGroundObject]):
         the control-point-wide reserve total: a CP with multiple motorpools
         spreads its reserve across them, and a flight targets one motorpool.
         """
-        return self.target.alive_unit_count
+        from game.missiongenerator.motorpoolpopulator import (
+            motorpool_rendered_unit_count,
+        )
+
+        settings = self.target.control_point.coalition.game.settings
+        return motorpool_rendered_unit_count(
+            self.target,
+            settings.motorpool_enabled,
+            settings.motorpool_spawn_cap,
+        )

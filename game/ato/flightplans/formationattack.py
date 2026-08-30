@@ -180,10 +180,9 @@ class FormationAttackBuilder(IBuilder[FlightPlanT, LayoutT], ABC):
 
         target_waypoints: list[FlightWaypoint] = []
         is_motorpool = isinstance(self.flight.package.target, MotorpoolGroundObject)
-        if self.flight.flight_type == FlightType.STRIKE and is_motorpool:
-            # Manual STRIKE receives one player-facing waypoint per live unit;
-            # an empty motorpool therefore has no target waypoints.
-            for target in targets or []:
+        if self.flight.flight_type == FlightType.STRIKE and is_motorpool and targets:
+            # Manual STRIKE receives one player-facing waypoint per live unit.
+            for target in targets:
                 target_waypoints.append(
                     self.target_waypoint(self.flight, builder, target)
                 )

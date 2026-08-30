@@ -42,6 +42,44 @@ def _select_capped(
     return {ut: n for ut, n in floors.items() if n > 0}
 
 
+def _projected_counts(
+    motorpools: list[MotorpoolGroundObject], cap: int
+) -> list[dict[GroundUnitType, int]]:
+    reserve = reserve_armor_for(motorpools[0].control_point)
+    selected = _select_capped(reserve, cap)
+    per_tgo: list[dict[GroundUnitType, int]] = [{} for _ in motorpools]
+    slot = 0
+    for unit_type, count in selected.items():
+        for _ in range(count):
+            bucket = per_tgo[slot % len(motorpools)]
+            bucket[unit_type] = bucket.get(unit_type, 0) + 1
+            slot += 1
+    return per_tgo
+
+
+def motorpool_rendered_unit_count(
+    tgo: MotorpoolGroundObject, motorpool_enabled: bool, spawn_cap: int
+) -> int:
+    """Return the alive units in the renderer's current or next snapshot.
+
+    Populated groups are authoritative, including an intentionally dead-only
+    snapshot. Empty groups are the normal pre-render state, so project the same
+    capped reserve allocation that ``MotorpoolPopulator`` will render.
+    """
+    if tgo.groups:
+        return tgo.alive_unit_count
+    if not motorpool_enabled or spawn_cap <= 0:
+        return 0
+    motorpools = [
+        candidate
+        for candidate in tgo.control_point.ground_objects
+        if isinstance(candidate, MotorpoolGroundObject)
+    ]
+    if tgo not in motorpools:
+        return 0
+    return sum(_projected_counts(motorpools, spawn_cap)[motorpools.index(tgo)].values())
+
+
 class MotorpoolPopulator:
     """Rebuilds every motorpool TGO's vehicle groups from the owning CP's current
     reserve slice. Ephemeral: called once per mission generation, before the TGO
@@ -72,18 +110,7 @@ class MotorpoolPopulator:
         # each TGO with the full reserve independently would render — and on a
         # strike decrement — the same reserve unit once per TGO, corrupting
         # base.armor when a CP has more than one authored motorpool location.
-        reserve = reserve_armor_for(motorpools[0].control_point)
-        selected = _select_capped(reserve, cap)
-        if not selected:
-            return
-        per_tgo: list[dict[GroundUnitType, int]] = [{} for _ in motorpools]
-        slot = 0
-        for unit_type, count in selected.items():
-            for _ in range(count):
-                bucket = per_tgo[slot % len(motorpools)]
-                bucket[unit_type] = bucket.get(unit_type, 0) + 1
-                slot += 1
-        for tgo, counts in zip(motorpools, per_tgo):
+        for tgo, counts in zip(motorpools, _projected_counts(motorpools, cap)):
             self._build_groups(tgo, counts)
 
     def _build_groups(

@@ -139,12 +139,21 @@ class ObjectiveFinder:
 
     def motorpool_targets(self) -> Iterator[MotorpoolGroundObject]:
         """Iterates over non-empty enemy motorpool depots worth striking."""
+        from game.missiongenerator.motorpoolpopulator import (
+            motorpool_rendered_unit_count,
+        )
+
         candidates: list[MotorpoolGroundObject] = []
         for enemy_cp in self.enemy_control_points():
             for ground_object in enemy_cp.ground_objects:
                 if (
                     isinstance(ground_object, MotorpoolGroundObject)
-                    and ground_object.groups
+                    and motorpool_rendered_unit_count(
+                        ground_object,
+                        self.game.settings.motorpool_enabled,
+                        self.game.settings.motorpool_spawn_cap,
+                    )
+                    > 0
                 ):
                     candidates.append(ground_object)
         yield from self._targets_by_range(candidates)
