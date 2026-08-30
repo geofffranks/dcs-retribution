@@ -118,7 +118,7 @@ class UnitTransactionFrame(QFrame, Generic[TransactionItemType]):
             TransactionItemType, PurchaseGroup[TransactionItemType]
         ] = {}
         self.game_model.transfer_model.inventory_changed.connect(
-            self.update_existing_units
+            self.post_transaction_update
         )
         self.update_available_budget()
 

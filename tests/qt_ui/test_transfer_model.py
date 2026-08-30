@@ -18,6 +18,8 @@ import pytest
 from PySide6.QtCore import QModelIndex, QObject, Signal
 from PySide6.QtWidgets import QApplication, QGridLayout, QPushButton
 
+from game.dcs.groundunittype import GroundUnitType
+from game.purchaseadapter import GroundUnitPurchaseAdapter
 from game.settings import Settings
 from game.sim.gameupdateevents import GameUpdateEvents
 from game.theater.base import Base
@@ -131,6 +133,10 @@ class FakeSimController(QObject):
     sim_update = Signal(GameUpdateEvents)
 
 
+class FakeTransferModel(QObject):
+    inventory_changed = Signal()
+
+
 class FakePurchaseAdapter:
     def __init__(self, current: int) -> None:
         self.current = current
@@ -171,6 +177,35 @@ def _game_model(game: Any, transfer_model: Any = None) -> Any:
     if transfer_model is None:
         transfer_model = MagicMock()
     return SimpleNamespace(game=game, transfer_model=transfer_model)
+
+
+def _ground_purchase_fixture(
+    transfer_model: TransferModel,
+) -> tuple[Any, GroundUnitType, Any]:
+    unit_type = cast(GroundUnitType, MagicMock(price=5, display_name="Tank"))
+    orders = SimpleNamespace(_pending=0)
+    orders.pending_orders = lambda _unit_type: orders._pending
+    orders.order = lambda _units: setattr(orders, "_pending", orders._pending + 1)
+    orders.sell = lambda _units: setattr(orders, "_pending", orders._pending - 1)
+    cp = SimpleNamespace(
+        ground_unit_orders=orders,
+        base=SimpleNamespace(total_units_of_type=lambda _unit_type: 0),
+        has_ground_unit_source=lambda _game: True,
+    )
+    coalition = SimpleNamespace(
+        budget=100,
+        adjust_budget=lambda amount: setattr(
+            coalition, "budget", coalition.budget + amount
+        ),
+    )
+    game = SimpleNamespace(settings=SimpleNamespace(enable_enemy_buy_sell=False))
+    adapter = GroundUnitPurchaseAdapter(
+        cast(Any, cp),
+        coalition,
+        cast(Any, game),
+        transfer_model.inventory_changed.emit,
+    )
+    return cp, unit_type, adapter
 
 
 def _transfer(
@@ -234,6 +269,121 @@ def test_unit_transaction_frame_refreshes_labels_after_external_inventory_change
     transfer_model.inventory_changed.emit()
 
     assert frame.existing_units_labels["tank"].text() == "7"
+
+
+def test_ground_purchase_refreshes_all_open_transaction_frames(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ground orders notify every open transaction frame, including pending labels."""
+    from qt_ui.windows.GameUpdateSignal import GameUpdateSignal
+
+    monkeypatch.setattr(
+        GameUpdateSignal,
+        "get_instance",
+        lambda: SimpleNamespace(updateBudget=lambda _game: None),
+    )
+    transfer_model = TransferModel(
+        _game_model(
+            _game_with_settings(_make_pending(Player.BLUE), _make_pending(Player.RED))
+        )
+    )
+    first_model = _game_model(SimpleNamespace(), transfer_model)
+    second_model = _game_model(SimpleNamespace(), transfer_model)
+    cp, unit_type, adapter = _ground_purchase_fixture(transfer_model)
+    cp.ground_objects = []
+    monkeypatch.setattr("game.server.EventStream.put_nowait", lambda _events: None)
+    first = UnitTransactionFrame(first_model, cast(Any, adapter))
+    second = UnitTransactionFrame(second_model, cast(Any, adapter))
+    first_layout = QGridLayout()
+    second_layout = QGridLayout()
+    first.add_purchase_row(unit_type, first_layout, 0)
+    second.add_purchase_row(unit_type, second_layout, 0)
+
+    adapter.buy(unit_type, 1)
+
+    assert cp.ground_unit_orders.pending_orders(unit_type) == 1
+    assert first.purchase_groups[unit_type].amount_bought.text() == "<b>1</b>"
+    assert second.purchase_groups[unit_type].amount_bought.text() == "<b>1</b>"
+
+
+def test_ground_purchase_does_not_refresh_frames_when_validation_fails(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rejected purchase does not emit a shared inventory refresh."""
+    from qt_ui.windows.GameUpdateSignal import GameUpdateSignal
+
+    monkeypatch.setattr(
+        GameUpdateSignal,
+        "get_instance",
+        lambda: SimpleNamespace(updateBudget=lambda _game: None),
+    )
+    transfer_model = TransferModel(
+        _game_model(
+            _game_with_settings(_make_pending(Player.BLUE), _make_pending(Player.RED))
+        )
+    )
+    cp, unit_type, adapter = _ground_purchase_fixture(transfer_model)
+    cp.ground_objects = []
+    monkeypatch.setattr("game.server.EventStream.put_nowait", lambda _events: None)
+    adapter.coalition.budget = 0
+    first = UnitTransactionFrame(
+        _game_model(SimpleNamespace(), transfer_model), cast(Any, adapter)
+    )
+    layout = QGridLayout()
+    first.add_purchase_row(unit_type, layout, 0)
+    refreshes: list[int] = []
+    transfer_model.inventory_changed.connect(lambda: refreshes.append(1))
+
+    from game.purchaseadapter import TransactionError
+
+    with pytest.raises(TransactionError):
+        adapter.buy(unit_type, 1)
+
+    assert cp.ground_unit_orders.pending_orders(unit_type) == 0
+    assert refreshes == []
+
+
+def test_armor_recruitment_menu_uses_captured_faction_catalog(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A RED menu lists RED units while enemy buy/sell authorization is enabled."""
+    from qt_ui.windows.basemenu.ground_forces.QArmorRecruitmentMenu import (
+        QArmorRecruitmentMenu,
+    )
+    from qt_ui.windows.GameUpdateSignal import GameUpdateSignal
+
+    monkeypatch.setattr(
+        GameUpdateSignal,
+        "get_instance",
+        lambda: SimpleNamespace(updateBudget=lambda _game: None),
+    )
+    blue_unit = cast(
+        GroundUnitType, MagicMock(display_name="Blue tank", price=5)
+    )
+    red_unit = cast(GroundUnitType, MagicMock(display_name="Red tank", price=5))
+    blue_faction = SimpleNamespace(ground_units={blue_unit})
+    red_faction = SimpleNamespace(ground_units={red_unit})
+    orders = SimpleNamespace(pending_orders=lambda _unit: 0)
+    game = SimpleNamespace(
+        settings=SimpleNamespace(enable_enemy_buy_sell=True),
+        faction_for=lambda player: blue_faction if player is Player.BLUE else red_faction,
+        coalition_for=lambda player: SimpleNamespace(
+            faction=blue_faction if player is Player.BLUE else red_faction,
+            transfers=SimpleNamespace(),
+            budget=100,
+        ),
+    )
+    cp = SimpleNamespace(
+        captured=Player.RED,
+        ground_unit_orders=orders,
+        base=SimpleNamespace(total_units_of_type=lambda _unit: 0),
+        has_ground_unit_source=lambda _game: True,
+    )
+    game_model = SimpleNamespace(game=game, transfer_model=FakeTransferModel())
+
+    menu = QArmorRecruitmentMenu(cast(Any, cp), cast(Any, game_model))
+
+    assert set(menu.purchase_groups) == {red_unit}
 
 
 # ---------------------------------------------------------------------------

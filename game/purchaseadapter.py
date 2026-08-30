@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import TypeVar, Generic, Any
+from typing import Any, Callable, Generic, Optional, TypeVar
 
 from game import Game
 from game.coalition import Coalition
@@ -144,10 +144,12 @@ class GroundUnitPurchaseAdapter(PurchaseAdapter[GroundUnitType]):
         control_point: ControlPoint,
         coalition: Coalition,
         game: Game,
+        inventory_changed: Optional[Callable[[], None]] = None,
     ) -> None:
         super().__init__(coalition)
         self.control_point = control_point
         self.game = game
+        self.inventory_changed = inventory_changed
 
     def buy(self, item: GroundUnitType, quantity: int) -> None:
         pending_before = self.pending_delivery_quantity(item)
@@ -171,6 +173,8 @@ class GroundUnitPurchaseAdapter(PurchaseAdapter[GroundUnitType]):
 
         events = GameUpdateEvents().update_motorpools_at(self.control_point)
         EventStream.put_nowait(events)
+        if self.inventory_changed is not None:
+            self.inventory_changed()
 
     def pending_delivery_quantity(self, item: GroundUnitType) -> int:
         return self.control_point.ground_unit_orders.pending_orders(item)
