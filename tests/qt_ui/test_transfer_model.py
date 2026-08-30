@@ -494,6 +494,7 @@ def test_armor_recruitment_menu_uses_captured_faction_catalog(
             faction=blue_faction if player is Player.BLUE else red_faction,
             transfers=SimpleNamespace(),
             budget=100,
+            player=player,
         ),
     )
     cp = SimpleNamespace(
@@ -507,7 +508,9 @@ def test_armor_recruitment_menu_uses_captured_faction_catalog(
     menu = QArmorRecruitmentMenu(cast(Any, cp), cast(Any, game_model))
 
     assert set(menu.purchase_groups) == {red_unit}
-    assert menu.purchase_groups[red_unit].sell_button.isHidden()
+    # With enemy buy/sell enabled and owned RED armor on base, the RED catalog
+    # offers direct sales (OPFOR cheat-mode feature).
+    assert not menu.purchase_groups[red_unit].sell_button.isHidden()
 
 
 # ---------------------------------------------------------------------------

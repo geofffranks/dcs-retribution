@@ -50,7 +50,7 @@ def test_cheat_menu_uses_explicit_opfor_transfer_label(app: QApplication) -> Non
     assert label.text() == "Enable OPFOR Buy/Sell/Transfer Cheat"
 
 
-def test_red_ground_sale_is_denied_even_when_cheat_is_enabled() -> None:
+def test_red_ground_sale_is_available_only_when_cheat_is_enabled() -> None:
     unit_type = cast(Any, MagicMock())
     unit_type.price = 5
     base = Base()
@@ -75,11 +75,11 @@ def test_red_ground_sale_is_denied_even_when_cheat_is_enabled() -> None:
         ),
     )
 
-    # The unified adapter keeps the inventory-status behavior its final review
-    # approved: fielded ground units are never sold directly (only pending
-    # orders can be cancelled), so the OPFOR cheat gates RED purchases and
-    # transfers but not direct sales of fielded units.
-    assert enabled.can_sell(unit_type) is False
+    # OPFOR cheat mode sells fielded RED units directly (feature requirement);
+    # BLUE/neutral sales remain unsupported outside this path.
+    assert enabled.can_sell(unit_type) is True
+    enabled.do_sale(unit_type)
+    assert base.total_units_of_type(unit_type) == 1
 
 
 def test_red_transfer_model_routes_transfer_to_red_collection_when_enabled() -> None:
