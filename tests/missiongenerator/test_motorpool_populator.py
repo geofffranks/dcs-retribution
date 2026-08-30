@@ -128,6 +128,22 @@ def test_rendered_unit_count_uses_current_reserve_after_consuming_snapshot() -> 
     assert motorpool_rendered_unit_count(tgo, motorpool_enabled=True, spawn_cap=10) == 0
 
 
+def test_planner_count_matches_next_renderer_after_reserve_replenishment() -> None:
+    gut = _gut()
+    tgo, cp = _motorpool({gut: 3})
+    game = cast("Game", _game([cp], cap=10))
+    pop = MotorpoolPopulator(game)
+    pop.populate()
+
+    cp.base.armor[gut] += 3
+    planner_count = motorpool_rendered_unit_count(tgo, True, 10)
+
+    pop.populate()
+    rendered_count = sum(len(g.units) for g in tgo.groups)
+
+    assert planner_count == rendered_count == 6
+
+
 def test_populate_is_idempotent_across_runs() -> None:
     gut = _gut()
     tgo, cp = _motorpool({gut: 3})

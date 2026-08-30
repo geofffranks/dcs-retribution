@@ -60,11 +60,10 @@ def _projected_counts(
 def motorpool_rendered_unit_count(
     tgo: MotorpoolGroundObject, motorpool_enabled: bool, spawn_cap: int
 ) -> int:
-    """Return the alive units in the renderer's current or next snapshot.
+    """Return the units in the renderer's next snapshot.
 
-    Populated groups are authoritative, including an intentionally dead-only
-    snapshot. Empty groups are the normal pre-render state, so project the same
-    capped reserve allocation that ``MotorpoolPopulator`` will render.
+    Project the same capped reserve allocation that ``MotorpoolPopulator`` will
+    render, regardless of the previous mission's ephemeral groups.
     """
     if not motorpool_enabled or spawn_cap <= 0:
         return 0
@@ -75,14 +74,7 @@ def motorpool_rendered_unit_count(
     ]
     if tgo not in motorpools:
         return 0
-    projected_count = sum(
-        _projected_counts(motorpools, spawn_cap)[motorpools.index(tgo)].values()
-    )
-    if tgo.groups:
-        # Groups are ephemeral and may outlive a reserve decrement from the prior
-        # mission. Never plan more units than the next current snapshot can render.
-        return min(tgo.alive_unit_count, projected_count)
-    return projected_count
+    return sum(_projected_counts(motorpools, spawn_cap)[motorpools.index(tgo)].values())
 
 
 class MotorpoolPopulator:
