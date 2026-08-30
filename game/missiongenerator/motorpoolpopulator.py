@@ -66,10 +66,10 @@ def motorpool_rendered_unit_count(
     snapshot. Empty groups are the normal pre-render state, so project the same
     capped reserve allocation that ``MotorpoolPopulator`` will render.
     """
-    if tgo.groups:
-        return tgo.alive_unit_count
     if not motorpool_enabled or spawn_cap <= 0:
         return 0
+    if tgo.groups:
+        return tgo.alive_unit_count
     motorpools = [
         candidate
         for candidate in tgo.control_point.ground_objects

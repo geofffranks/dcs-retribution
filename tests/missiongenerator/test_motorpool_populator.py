@@ -4,12 +4,16 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock
 
+import pytest
 from dcs.mapping import Point
 from dcs.terrain import Terrain
 from dcs.vehicles import Armor
 
 from game.dcs.groundunittype import GroundUnitType
-from game.missiongenerator.motorpoolpopulator import MotorpoolPopulator
+from game.missiongenerator.motorpoolpopulator import (
+    MotorpoolPopulator,
+    motorpool_rendered_unit_count,
+)
 from game.theater.controlpoint import ControlPoint
 from game.theater.presetlocation import PresetLocation
 from game.theater.theatergroundobject import MotorpoolGroundObject
@@ -89,6 +93,20 @@ def test_populate_disabled_renders_nothing() -> None:
     tgo, cp = _motorpool({gut: 5})
     MotorpoolPopulator(cast("Game", _game([cp], cap=10, enabled=False))).populate()
     assert tgo.groups == []
+
+
+@pytest.mark.parametrize(
+    ("enabled", "cap"),
+    [(False, 10), (True, 0)],
+)
+def test_rendered_unit_count_ignores_stale_groups_when_not_rendering(
+    enabled: bool, cap: int
+) -> None:
+    gut = _gut()
+    tgo, _cp = _motorpool({gut: 5})
+    tgo.groups = [SimpleNamespace(alive_units=1)]
+
+    assert motorpool_rendered_unit_count(tgo, enabled, cap) == 0
 
 
 def test_populate_is_idempotent_across_runs() -> None:
