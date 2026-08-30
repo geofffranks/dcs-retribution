@@ -657,9 +657,10 @@ class PendingTransfers:
         AirliftPlanner(self.game, transfer, next_stop).create_package_for_airlift(now)
 
     def validate_transfer(self, transfer: TransferOrder) -> None:
-        assert (
-            transfer.player == self.player
-        ), "Transfer ownership does not match the collection's player"
+        if transfer.player != self.player:
+            raise ValueError(
+                "Transfer ownership does not match the collection's player"
+            )
         if transfer.player.is_neutral:
             raise ValueError("Neutral transfers are not allowed")
         if transfer.origin.captured != transfer.player:

@@ -117,6 +117,14 @@ def test_transfer_owner_survives_origin_capture_and_split() -> None:
     assert pending.split_transfer(transfer, 1).player is Player.BLUE
 
 
+def test_transfer_rejects_collection_owner_mismatch_without_assert() -> None:
+    pending = PendingTransfers(cast(Any, SimpleNamespace()), Player.BLUE)
+    transfer = cast(Any, SimpleNamespace(player=Player.RED))
+
+    with pytest.raises(ValueError, match="ownership"):
+        pending.validate_transfer(transfer)
+
+
 def test_transfer_migration_backfills_missing_owner() -> None:
     transfer = SimpleNamespace()
     coalition = SimpleNamespace(player=Player.RED)
