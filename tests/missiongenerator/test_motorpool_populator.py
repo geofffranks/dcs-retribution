@@ -17,6 +17,7 @@ from game.missiongenerator.motorpoolpopulator import (
 from game.theater.controlpoint import ControlPoint
 from game.theater.presetlocation import PresetLocation
 from game.theater.theatergroundobject import MotorpoolGroundObject
+from game.theater.theatergroup import TheaterGroup
 from game.utils import Heading
 
 if TYPE_CHECKING:
@@ -104,7 +105,7 @@ def test_rendered_unit_count_ignores_stale_groups_when_not_rendering(
 ) -> None:
     gut = _gut()
     tgo, _cp = _motorpool({gut: 5})
-    tgo.groups = [SimpleNamespace(alive_units=1)]
+    tgo.groups = cast("list[TheaterGroup]", [SimpleNamespace(alive_units=1)])
 
     assert motorpool_rendered_unit_count(tgo, enabled, cap) == 0
 

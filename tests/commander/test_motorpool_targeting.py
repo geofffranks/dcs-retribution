@@ -146,6 +146,28 @@ def test_motorpool_strike_proposes_strike_plus_escorts() -> None:
     assert FlightType.SEAD_ESCORT in flight_tasks
 
 
+def test_motorpool_bai_sizes_from_shared_cp_allocation() -> None:
+    tgo = _motorpool_target(10)
+    cp = tgo.control_point
+    second = MotorpoolGroundObject(
+        "CP Motorpool 1",
+        PresetLocation(
+            "G",
+            Point(0.0, 0.0, MagicMock(spec=Terrain)),
+            Heading.from_degrees(0.0),
+        ),
+        cp,
+        GroupTask.MOTORPOOL,
+    )
+    cp.ground_objects = [tgo, second]  # type: ignore[misc]
+
+    task = PlanMotorpoolAttack(tgo, FlightType.BAI)
+    task.propose_flights()
+
+    bai = next(f for f in task.flights if f.task is FlightType.BAI)
+    assert bai.num_aircraft == 2  # five of the shared ten-unit cap go to this TGO
+
+
 def test_motorpool_attack_effect_removes_target() -> None:
     tgo = _motorpool_target(4)
     other = _motorpool_target(4)
