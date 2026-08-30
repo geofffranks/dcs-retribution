@@ -19,7 +19,7 @@ from PySide6.QtCore import QModelIndex, QObject, Signal
 from PySide6.QtWidgets import QApplication, QGridLayout, QPushButton, QWidget
 
 from game.dcs.groundunittype import GroundUnitType
-from game.purchaseadapter import GroundUnitPurchaseAdapter
+from game.purchaseadapter import GroundUnitPurchaseAdapter, TransactionError
 from game.settings import Settings
 from game.sim.gameupdateevents import GameUpdateEvents
 from game.theater.base import Base
@@ -180,7 +180,7 @@ def _game_model(game: Any, transfer_model: Any = None) -> Any:
 
 
 def _ground_purchase_fixture(
-    transfer_model: TransferModel,
+    transfer_model: Any,
 ) -> tuple[Any, GroundUnitType, Any]:
     unit_type = cast(GroundUnitType, MagicMock(price=5, display_name="Tank"))
     orders = SimpleNamespace(_pending=0)
@@ -188,11 +188,12 @@ def _ground_purchase_fixture(
     orders.order = lambda _units: setattr(orders, "_pending", orders._pending + 1)
     orders.sell = lambda _units: setattr(orders, "_pending", orders._pending - 1)
     cp = SimpleNamespace(
+        captured=Player.BLUE,
         ground_unit_orders=orders,
         base=SimpleNamespace(total_units_of_type=lambda _unit_type: 0),
         has_ground_unit_source=lambda _game: True,
     )
-    coalition = SimpleNamespace(
+    coalition: Any = SimpleNamespace(
         budget=100,
         adjust_budget=lambda amount: setattr(
             coalition, "budget", coalition.budget + amount
@@ -201,7 +202,7 @@ def _ground_purchase_fixture(
     game = SimpleNamespace(settings=SimpleNamespace(enable_enemy_buy_sell=False))
     adapter = GroundUnitPurchaseAdapter(
         cast(Any, cp),
-        coalition,
+        cast(Any, coalition),
         cast(Any, game),
         transfer_model.inventory_changed.emit,
     )
@@ -385,6 +386,75 @@ def test_red_base_menu_exposes_authorized_ground_forces_tab(
     tabs = tabs_module.QBaseMenuTabs(cast(Any, cp), cast(Any, game_model))
 
     assert [tabs.tabText(index) for index in range(tabs.count())] == expected_tabs
+
+
+def test_neutral_base_menu_does_not_expose_ground_forces_tab(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Neutral control points do not expose the ground-forces catalog."""
+    from qt_ui.windows.basemenu import QBaseMenuTabs as tabs_module
+
+    class StubAirfield(QWidget):
+        def __init__(self, _cp: Any, _game_model: Any) -> None:
+            super().__init__()
+
+    class StubGroundForces(QWidget):
+        def __init__(self, _cp: Any, _game_model: Any) -> None:
+            super().__init__()
+
+    monkeypatch.setattr(tabs_module, "QAirfieldCommand", StubAirfield)
+    monkeypatch.setattr(tabs_module, "QGroundForcesHQ", StubGroundForces)
+
+    cp = SimpleNamespace(
+        captured=Player.NEUTRAL,
+        can_deploy_ground_units=True,
+    )
+    game_model = SimpleNamespace(game=SimpleNamespace(settings=SimpleNamespace()))
+
+    tabs = tabs_module.QBaseMenuTabs(cast(Any, cp), cast(Any, game_model))
+
+    assert "Ground Forces HQ" not in [
+        tabs.tabText(index) for index in range(tabs.count())
+    ]
+
+
+def test_ground_purchase_authorization_is_live_and_owner_based() -> None:
+    """Ground purchases follow the current owner and RED's live setting."""
+    transfer_model = FakeTransferModel()
+    cp, unit_type, adapter = _ground_purchase_fixture(transfer_model)
+    cp.captured = Player.RED
+
+    assert not adapter.can_buy(unit_type)
+    with pytest.raises(TransactionError):
+        adapter.buy(unit_type, 1)
+    assert cp.ground_unit_orders.pending_orders(unit_type) == 0
+
+    adapter.game.settings.enable_enemy_buy_sell = True
+    assert adapter.can_buy(unit_type)
+    adapter.buy(unit_type, 1)
+    assert cp.ground_unit_orders.pending_orders(unit_type) == 1
+
+    adapter.game.settings.enable_enemy_buy_sell = False
+    with pytest.raises(TransactionError):
+        adapter.sell(unit_type, 1)
+    assert cp.ground_unit_orders.pending_orders(unit_type) == 1
+
+
+def test_ground_purchase_direct_neutral_calls_are_denied() -> None:
+    """Neutral owners cannot buy or cancel ground-unit orders directly."""
+    transfer_model = FakeTransferModel()
+    cp, unit_type, adapter = _ground_purchase_fixture(transfer_model)
+    cp.captured = Player.NEUTRAL
+    cp.ground_unit_orders.order({unit_type: 1})
+
+    assert not adapter.can_buy(unit_type)
+    assert not adapter.can_sell(unit_type)
+    assert not adapter.can_sell_or_cancel(unit_type)
+    with pytest.raises(TransactionError):
+        adapter.buy(unit_type, 1)
+    with pytest.raises(TransactionError):
+        adapter.sell(unit_type, 1)
+    assert cp.ground_unit_orders.pending_orders(unit_type) == 1
 
 
 def test_armor_recruitment_menu_uses_captured_faction_catalog(

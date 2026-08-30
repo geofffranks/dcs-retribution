@@ -241,6 +241,58 @@ def test_event_serialization_reconciles_motorpool_payload(
     assert [unit.id for unit in list(tgo.units)[:2]] == original_ids
 
 
+def test_event_serialization_sorts_updated_tgos_by_stable_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Updated TGO payload order is deterministic despite set iteration order."""
+    from game.server.eventstream.models import GameUpdateEventsJs
+
+    class StubTgo:
+        def __init__(self, name: str) -> None:
+            self.id = uuid4()
+            self.name = name
+
+        __hash__ = object.__hash__
+
+    first = StubTgo("first")
+    second = StubTgo("second")
+    tgos = {first, second}
+    expected = sorted(tgos, key=lambda tgo: tgo.id)
+
+    def serialize(tgo: StubTgo) -> TgoJs:
+        return TgoJs(
+            id=tgo.id,
+            name=tgo.name,
+            control_point_name="cp",
+            category="category",
+            blue=True,
+            position=LeafletPoint(lat=0, lng=0),
+            units=[],
+            reserve_units=[],
+            expected_inventory=[],
+            unrendered_reserve=[],
+            in_transit_units=[],
+            threat_ranges=[],
+            detection_ranges=[],
+            dead=False,
+            sidc="",
+            task=None,
+            mobile=False,
+            destination=None,
+        )
+
+    monkeypatch.setattr("game.server.eventstream.models.TgoJs.for_tgo", serialize)
+    monkeypatch.setattr(
+        "game.server.eventstream.models.UnculledZoneJs.from_game", lambda _game: []
+    )
+
+    payload = GameUpdateEventsJs.from_events(
+        GameUpdateEvents(updated_tgos=cast(Any, tgos)), cast(Any, SimpleNamespace())
+    )
+
+    assert [tgo.name for tgo in payload.updated_tgos] == [tgo.name for tgo in expected]
+
+
 def test_same_cp_motorpool_payloads_are_disjoint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

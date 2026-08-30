@@ -128,7 +128,10 @@ class GameUpdateEventsJs(BaseModel):
             deselected_flight=events.deselected_flight,
             updated_front_lines=updated_front_lines,
             deleted_front_lines=events.deleted_front_lines,
-            updated_tgos=[TgoJs.for_tgo(tgo) for tgo in events.updated_tgos],
+            updated_tgos=[
+                TgoJs.for_tgo(tgo)
+                for tgo in sorted(events.updated_tgos, key=lambda tgo: tgo.id)
+            ],
             updated_control_points=[
                 ControlPointJs.for_control_point(cp)
                 for cp in events.updated_control_points

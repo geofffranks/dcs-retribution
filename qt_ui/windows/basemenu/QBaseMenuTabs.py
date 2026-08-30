@@ -25,8 +25,9 @@ class QBaseMenuTabs(QTabWidget):
             return
 
         if isinstance(cp, Fob):
-            self.ground_forces_hq = QGroundForcesHQ(cp, game_model)
-            self.addTab(self.ground_forces_hq, "Ground Forces HQ")
+            if not cp.captured.is_neutral:
+                self.ground_forces_hq = QGroundForcesHQ(cp, game_model)
+                self.addTab(self.ground_forces_hq, "Ground Forces HQ")
             if cp.has_ground_spawns:
                 self.airfield_command = QAirfieldCommand(cp, game_model)
                 self.addTab(self.airfield_command, "Airfield Command")
@@ -36,6 +37,6 @@ class QBaseMenuTabs(QTabWidget):
         else:
             self.airfield_command = QAirfieldCommand(cp, game_model)
             self.addTab(self.airfield_command, "Airfield Command")
-            if cp.can_deploy_ground_units:
+            if cp.can_deploy_ground_units and not cp.captured.is_neutral:
                 self.ground_forces_hq = QGroundForcesHQ(cp, game_model)
                 self.addTab(self.ground_forces_hq, "Ground Forces HQ")
