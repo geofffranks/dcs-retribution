@@ -11,6 +11,7 @@ from dcs import Point
 
 from game.flightplan import HoldZoneGeometry
 from game.theater import MissionTarget
+from game.theater.theatergroundobject import MotorpoolGroundObject
 from game.utils import nautical_miles, Speed, feet
 from .flightplan import FlightPlan
 from .formation import FormationFlightPlan, FormationLayout
@@ -178,12 +179,21 @@ class FormationAttackBuilder(IBuilder[FlightPlanT, LayoutT], ABC):
         builder = WaypointBuilder(self.flight, targets)
 
         target_waypoints: list[FlightWaypoint] = []
-        if targets:
+        is_motorpool = isinstance(self.flight.package.target, MotorpoolGroundObject)
+        if self.flight.flight_type == FlightType.STRIKE and is_motorpool and targets:
+            # Manual STRIKE receives one player-facing waypoint per live unit.
+            for target in targets:
+                target_waypoints.append(
+                    self.target_waypoint(self.flight, builder, target)
+                )
+        elif targets and not is_motorpool:
             for target in targets:
                 target_waypoints.append(
                     self.target_waypoint(self.flight, builder, target)
                 )
         else:
+            # Motorpools remain one target area for Armed Recon and BAI, while
+            # targetless area-based missions retain their existing fallback.
             target_waypoints.append(
                 self.target_area_waypoint(
                     self.flight, self.flight.package.target, builder
