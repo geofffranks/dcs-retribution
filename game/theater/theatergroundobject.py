@@ -696,6 +696,13 @@ class MotorpoolGroundObject(TheaterGroundObject):
             LandInstallationEntity.MAINTENANCE_FACILITY,
         )
 
+    def mission_types(self, for_player: Player) -> Iterator[FlightType]:
+        from game.ato import FlightType
+
+        if not self.is_friendly(for_player):
+            yield FlightType.BAI
+        yield from super().mission_types(for_player)
+
     @property
     def capturable(self) -> bool:
         return False

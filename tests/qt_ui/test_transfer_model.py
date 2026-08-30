@@ -389,6 +389,35 @@ def test_red_insert_appends(app: QApplication) -> None:
     assert model.rowCount() == 2
 
 
+def test_hidden_red_insert_mutates_backend_without_row_signal(
+    app: QApplication, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A hidden RED transfer updates state without announcing a nonexistent row."""
+    blue = _make_pending(Player.BLUE)
+    red = _make_pending(Player.RED)
+    game = _game_with_settings(blue, red, enemy_buy_sell=False)
+    model = TransferModel(_game_model(game))
+    inserts: list[tuple[int, int]] = []
+    inventory_refreshes: list[int] = []
+    published: list[GameUpdateEvents] = []
+    cast(Any, model).rowsInserted.connect(
+        lambda parent, first, last: inserts.append((first, last))
+    )
+    model.inventory_changed.connect(lambda: inventory_refreshes.append(1))
+    monkeypatch.setattr("qt_ui.models.EventStream.put_nowait", published.append)
+
+    origin = _cp("Red Origin", captured=Player.RED)
+    destination = _cp("Red Dest", captured=Player.RED)
+    transfer = _transfer(origin, destination, Player.RED)
+    model.new_transfer(transfer, datetime.now())
+
+    assert red.pending_transfers == [transfer]
+    assert inserts == []
+    assert model.rowCount() == 0
+    assert len(published) == 1
+    assert inventory_refreshes == [1]
+
+
 # ---------------------------------------------------------------------------
 # Removal
 # ---------------------------------------------------------------------------

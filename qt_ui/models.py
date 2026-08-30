@@ -458,14 +458,17 @@ class TransferModel(QAbstractListModel):
 
     def new_transfer(self, transfer: TransferOrder, now: datetime) -> None:
         """Updates the game with the new unit transfer."""
-        if transfer.player.is_blue:
-            insert_row = len(self._transfers_for(Player.BLUE).pending_transfers)
-        else:
-            insert_row = self.rowCount()
-        self.beginInsertRows(QModelIndex(), insert_row, insert_row)
+        visible = transfer.player.is_blue or self._red_visible
+        if visible:
+            if transfer.player.is_blue:
+                insert_row = len(self._transfers_for(Player.BLUE).pending_transfers)
+            else:
+                insert_row = self.rowCount()
+            self.beginInsertRows(QModelIndex(), insert_row, insert_row)
         events = GameUpdateEvents()
         self._transfers_for(self.owner_of(transfer)).new_transfer(transfer, now, events)
-        self.endInsertRows()
+        if visible:
+            self.endInsertRows()
         EventStream.put_nowait(events)
         self.inventory_changed.emit()
 
