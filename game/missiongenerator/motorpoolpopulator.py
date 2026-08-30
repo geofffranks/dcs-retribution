@@ -190,6 +190,7 @@ class MotorpoolPopulator:
         self, tgo: MotorpoolGroundObject, desired: list[_DesiredUnit]
     ) -> None:
         current_by_key: dict[ProjectionKey, tuple[TheaterGroup, TheaterUnit]] = {}
+        cached_units = [unit for group in tgo.groups for unit in group.units]
         for group in tgo.groups:
             for unit in group.units:
                 key = tgo.motorpool_projection_keys.get(unit.id)
@@ -198,7 +199,7 @@ class MotorpoolPopulator:
 
         desired_keys = {entry.key for entry in desired}
         current_keys = set(current_by_key)
-        if desired_keys == current_keys:
+        if desired_keys == current_keys and len(cached_units) == len(current_by_key):
             return
 
         desired_by_type: defaultdict[str, list[_DesiredUnit]] = defaultdict(list)

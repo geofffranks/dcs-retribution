@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from itertools import permutations
 import pickle
 from types import SimpleNamespace
@@ -488,6 +489,45 @@ def test_dead_persisted_unit_is_replaced_for_matching_projection_key() -> None:
     assert live_units[0].alive
     assert live_units[0].id != dead_unit.id
     assert game.motorpool_id_counts["u"] == allocator_counts["u"] + 1
+
+
+def test_unchanged_live_projection_removes_extra_dead_cached_unit() -> None:
+    gut = _gut()
+    tgo, cp = _motorpool({gut: 1})
+    game = _game([cp], cap=10)
+    populator = MotorpoolPopulator(cast("Game", game))
+    populator.populate()
+    group = tgo.groups[0]
+    live_unit = group.units[0]
+    dead_unit = replace(live_unit, id=game.next_unit_id(), alive=False)
+    group.units = [live_unit, dead_unit]
+    tgo.motorpool_projection_keys[dead_unit.id] = (tgo.id, gut.variant_id, 1)
+
+    populator.populate()
+
+    assert tgo.groups[0] is group
+    assert tgo.groups[0].units == [live_unit]
+    assert tgo.groups[0].units[0] is live_unit
+    assert tgo.motorpool_projection_keys == {
+        live_unit.id: (tgo.id, gut.variant_id, 0),
+    }
+
+
+def test_all_dead_cached_units_are_removed_when_desired_projection_is_empty() -> None:
+    gut = _gut()
+    tgo, cp = _motorpool({gut: 1})
+    game = _game([cp], cap=10)
+    populator = MotorpoolPopulator(cast("Game", game))
+    populator.populate()
+    tgo.groups[0].units[0].alive = False
+    cp.base.armor[gut] = 0
+    cp.base.total_armor = 0
+
+    populator.populate()
+
+    assert tgo.groups == []
+    assert tgo.motorpool_unit_types == {}
+    assert tgo.motorpool_projection_keys == {}
 
 
 def test_disabled_or_zero_cap_reconciliation_empties_every_motorpool() -> None:
