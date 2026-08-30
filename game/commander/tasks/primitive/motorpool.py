@@ -30,4 +30,13 @@ class PlanMotorpoolAttack(PackagePlanningTask[MotorpoolGroundObject]):
         self.propose_common_escorts()
 
     def _rendered_unit_count(self) -> int:
-        return self.target.alive_unit_count
+        from game.missiongenerator.motorpoolpopulator import (
+            motorpool_rendered_unit_count,
+        )
+
+        settings = self.target.coalition.game.settings
+        return motorpool_rendered_unit_count(
+            self.target,
+            settings.motorpool_enabled,
+            settings.motorpool_spawn_cap,
+        )

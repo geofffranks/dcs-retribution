@@ -181,6 +181,8 @@ def _motorpool_target(rendered_count: int) -> MotorpoolGroundObject:
     tgo, cp = _motorpool_cp({gut: rendered_count}, friendly=False)
     tgo.groups = [MagicMock(alive_units=rendered_count)] if rendered_count else []
     settings = cp.coalition.game.settings
+    settings.motorpool_enabled = True
+    settings.motorpool_spawn_cap = 10
     settings.fpa_2ship_weight = 1
     settings.fpa_3ship_weight = 0
     settings.fpa_4ship_weight = 0
@@ -208,6 +210,27 @@ def test_motorpool_attack_effect_removes_target() -> None:
     task.package = None  # super().apply_effects is a no-op with no package
     task.apply_effects(state)  # type: ignore[arg-type]
     assert state.motorpool_targets == [other]
+
+
+def test_motorpool_attack_precondition_accepts_projected_empty_groups(
+    monkeypatch: Any,
+) -> None:
+    gut = _gut()
+    tgo, cp = _motorpool_cp({gut: 4}, friendly=False)
+    cp.coalition.game.settings.motorpool_enabled = True
+    cp.coalition.game.settings.motorpool_spawn_cap = 10
+    state = SimpleNamespace(
+        motorpool_targets=[tgo],
+        context=SimpleNamespace(
+            coalition=SimpleNamespace(player=SimpleNamespace(is_blue=False)),
+            settings=SimpleNamespace(),
+        ),
+    )
+    task = PlanMotorpoolAttack(tgo)
+    monkeypatch.setattr(task, "target_area_preconditions_met", lambda _state: True)
+    monkeypatch.setattr(task, "fulfill_mission", lambda _state: True)
+
+    assert task.preconditions_met(state) is True  # type: ignore[arg-type]
 
 
 def test_motorpool_attack_precondition_fails_when_rendered_groups_are_empty() -> None:
