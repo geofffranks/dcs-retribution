@@ -16,6 +16,7 @@ from game.commander.tasks.primitive.armedrecon import PlanArmedRecon
 from game.commander.tasks.primitive.motorpool import PlanMotorpoolAttack
 from game.data.groups import GroupTask
 from game.dcs.groundunittype import GroundUnitType
+from game.missiongenerator.motorpoolpopulator import MotorpoolPopulator
 from game.theater.controlpoint import ControlPoint
 from game.theater.player import Player
 from game.theater.presetlocation import PresetLocation
@@ -51,9 +52,21 @@ def _motorpool_cp(
 def _game(
     controlpoints: list[ControlPoint], cap: int = 10, enabled: bool = True
 ) -> object:
+    counter = {"u": 0, "g": 0}
+
+    def next_unit_id() -> int:
+        counter["u"] += 1
+        return counter["u"]
+
+    def next_group_id() -> int:
+        counter["g"] += 1
+        return counter["g"]
+
     return SimpleNamespace(
         theater=SimpleNamespace(controlpoints=controlpoints),
         settings=SimpleNamespace(motorpool_enabled=enabled, motorpool_spawn_cap=cap),
+        next_unit_id=next_unit_id,
+        next_group_id=next_group_id,
     )
 
 
@@ -123,6 +136,17 @@ def test_motorpool_targets_excludes_dead_only_groups() -> None:
     assert (
         list(ObjectiveFinder(cast("Game", game), Player.BLUE).motorpool_targets()) == []
     )
+
+
+def test_motorpool_targets_excludes_stale_groups_after_reserve_consumption() -> None:
+    gut = _gut()
+    target, enemy_cp = _motorpool_cp({gut: 4}, friendly=False)
+    game = cast("Game", _game([enemy_cp, _friendly_cp()]))
+
+    MotorpoolPopulator(game).populate()
+    enemy_cp.base.armor[gut] -= 4
+
+    assert list(ObjectiveFinder(game, Player.BLUE).motorpool_targets()) == []
 
 
 def test_motorpool_targets_excludes_motorpool_when_spawn_cap_is_zero() -> None:
