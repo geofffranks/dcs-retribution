@@ -324,6 +324,7 @@ class NewUnitTransferDialog(QDialog):
             origin=self.origin,
             destination=destination,
             units=transfers,
+            player=self.origin.captured,
             request_airflift=self.dest_panel.request_airlift,
         )
         self.game_model.transfer_model.new_transfer(

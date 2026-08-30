@@ -107,11 +107,13 @@ class TransferOrder:
     #: stops and can switch transport modes before reaching their destination.
     position: ControlPoint = field(init=False)
 
-    #: True if the transfer order belongs to the player.
-    player: Player = field(init=False)
-
     #: The units being transferred.
     units: dict[GroundUnitType, int]
+
+    #: The coalition that owns this transfer. This is the sole ownership authority;
+    #: it is set at construction time and never derived from mutable control-point
+    #: state.
+    player: Player
 
     transport: Optional[Transport] = field(default=None)
 
@@ -122,12 +124,11 @@ class TransferOrder:
         count = self.size
         origin = self.origin.name
         destination = self.destination.name
-        description = "Transfer" if self.player else "Enemy transfer"
+        description = "Transfer" if self.player.is_blue else "Enemy transfer"
         return f"{description} of {count} units from {origin} to {destination}"
 
     def __post_init__(self) -> None:
         self.position = self.origin
-        self.player = self.origin.captured
 
     @property
     def description(self) -> str:
@@ -281,7 +282,7 @@ class AirliftPlanner:
         self.game = game
         self.transfer = transfer
         self.next_stop = next_stop
-        self.for_player = transfer.destination.captured
+        self.for_player = transfer.player
         self.package = Package(next_stop, game.db.flights, auto_asap=True)
 
     def compatible_with_mission(
@@ -451,7 +452,9 @@ class MultiGroupTransport(MissionTarget, Transport):
 
     @property
     def player_owned(self) -> Player:
-        return self.origin.captured
+        if not self.transfers:
+            raise RuntimeError("Transport has no transfers")
+        return self.transfers[0].player
 
     def find_escape_route(self) -> Optional[ControlPoint]:
         raise NotImplementedError
@@ -649,6 +652,9 @@ class PendingTransfers:
         AirliftPlanner(self.game, transfer, next_stop).create_package_for_airlift(now)
 
     def new_transfer(self, transfer: TransferOrder, now: datetime) -> None:
+        assert (
+            transfer.player == self.player
+        ), "Transfer ownership does not match the collection's player"
         transfer.origin.base.commit_losses(transfer.units)
         self.pending_transfers.append(transfer)
         self.arrange_transport(transfer, now)
@@ -674,7 +680,12 @@ class PendingTransfers:
             units[unit_type] = take
         for td in to_delete:
             del transfer.units[td]
-        new_transfer = TransferOrder(transfer.origin, transfer.destination, units)
+        new_transfer = TransferOrder(
+            transfer.origin,
+            transfer.destination,
+            units,
+            player=transfer.player,
+        )
         self.pending_transfers.append(new_transfer)
         return new_transfer
 
