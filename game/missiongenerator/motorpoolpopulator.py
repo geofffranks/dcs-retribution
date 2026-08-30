@@ -5,10 +5,12 @@ from typing import TYPE_CHECKING
 from game.point_with_heading import PointWithHeading
 
 from game.dcs.groundunittype import GroundUnitType
-from game.ground_forces.ai_ground_planner import reserve_armor_for
 from game.theater.controlpoint import ControlPoint, ControlPointType
 from game.theater.theatergroup import TheaterGroup, TheaterUnit
-from game.theater.theatergroundobject import MotorpoolGroundObject
+from game.theater.theatergroundobject import (
+    MotorpoolGroundObject,
+    motorpool_projected_counts,
+)
 
 if TYPE_CHECKING:
     from game.game import Game
@@ -28,64 +30,6 @@ def motorpool_identity(
     original_name: str, location: PointWithHeading
 ) -> MotorpoolIdentity:
     return (original_name, location.x, location.y, location.heading.degrees)
-
-
-def _select_capped(
-    reserve: dict[GroundUnitType, int], cap: int
-) -> dict[GroundUnitType, int]:
-    """Proportionally reduce ``reserve`` so its counts sum to at most ``cap``,
-    using the largest-remainder method (keeps a representative spread of types).
-    Returns a copy of ``reserve`` unchanged when it already fits under the cap."""
-    total = sum(reserve.values())
-    if total <= cap:
-        return {ut: n for ut, n in reserve.items() if n > 0}
-    exact = {ut: count * cap / total for ut, count in reserve.items()}
-    floors = {ut: int(v) for ut, v in exact.items()}
-    remaining = cap - sum(floors.values())
-    if remaining > 0:
-        by_frac = sorted(
-            ((ut, exact[ut] - floors[ut]) for ut in reserve),
-            key=lambda kv: kv[1],
-            reverse=True,
-        )
-        for ut, _frac in by_frac[:remaining]:
-            floors[ut] += 1
-    return {ut: n for ut, n in floors.items() if n > 0}
-
-
-def _projected_counts(
-    motorpools: list[MotorpoolGroundObject], cap: int
-) -> list[dict[GroundUnitType, int]]:
-    reserve = reserve_armor_for(motorpools[0].control_point)
-    selected = _select_capped(reserve, cap)
-    per_tgo: list[dict[GroundUnitType, int]] = [{} for _ in motorpools]
-    slot = 0
-    for unit_type, count in selected.items():
-        for _ in range(count):
-            bucket = per_tgo[slot % len(motorpools)]
-            bucket[unit_type] = bucket.get(unit_type, 0) + 1
-            slot += 1
-    return per_tgo
-
-
-def motorpool_rendered_unit_count(
-    tgo: MotorpoolGroundObject, motorpool_enabled: bool, spawn_cap: int
-) -> int:
-    """Return the units in the renderer's next snapshot.
-
-    Project the same capped reserve allocation that ``MotorpoolPopulator`` will
-    render, regardless of the previous mission's ephemeral groups.
-    """
-    if not motorpool_enabled or spawn_cap <= 0:
-        return 0
-    motorpools = [
-        candidate
-        for candidate in tgo.control_point.ground_objects
-        if isinstance(candidate, MotorpoolGroundObject)
-    ]
-    if tgo not in motorpools:
-        return 0
-    return sum(_projected_counts(motorpools, spawn_cap)[motorpools.index(tgo)].values())
 
 
 class MotorpoolPopulator:
@@ -193,7 +137,7 @@ class MotorpoolPopulator:
         # each TGO with the full reserve independently would render — and on a
         # strike decrement — the same reserve unit once per TGO, corrupting
         # base.armor when a CP has more than one authored motorpool location.
-        for tgo, counts in zip(motorpools, _projected_counts(motorpools, cap)):
+        for tgo, counts in zip(motorpools, motorpool_projected_counts(motorpools, cap)):
             self._build_groups(tgo, counts)
 
     def _build_groups(

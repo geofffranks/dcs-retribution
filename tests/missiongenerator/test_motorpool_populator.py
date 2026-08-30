@@ -10,10 +10,8 @@ from dcs.terrain import Terrain
 from dcs.vehicles import Armor
 
 from game.dcs.groundunittype import GroundUnitType
-from game.missiongenerator.motorpoolpopulator import (
-    MotorpoolPopulator,
-    motorpool_rendered_unit_count,
-)
+from game.missiongenerator.motorpoolpopulator import MotorpoolPopulator
+from game.theater.theatergroundobject import motorpool_rendered_unit_count
 from game.theater.base import Base
 from game.theater.controlpoint import ControlPoint
 from game.theater.presetlocation import PresetLocation
