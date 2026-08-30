@@ -204,6 +204,13 @@ class TransferOrder:
         return self.destination == self.position or not self.size
 
     def disband_at(self, location: ControlPoint) -> None:
+        if not location.is_friendly(self.player):
+            logging.info(
+                f"Cannot disband units at {location}: it is not friendly to "
+                f"{self.player}. Units were destroyed during transfer."
+            )
+            self.kill_all()
+            return
         logging.info(f"Units halting at {location}.")
         location.base.commission_units(self.units)
         self.units.clear()
@@ -442,11 +449,11 @@ class MultiGroupTransport(MissionTarget, Transport):
         self.transfers: List[TransferOrder] = []
 
     def is_friendly(self, to_player: Player) -> bool:
-        if self.origin.captured == to_player:
-            return True
-        return False
+        return self.player_owned == to_player
 
     def add_units(self, transfer: TransferOrder) -> None:
+        if self.transfers and transfer.player is not self.player_owned:
+            raise ValueError("Transport ownership does not match transfer's player")
         self.transfers.append(transfer)
         transfer.transport = self
 
@@ -492,7 +499,9 @@ class MultiGroupTransport(MissionTarget, Transport):
 
     @property
     def player_owned(self) -> Player:
-        return self.origin.captured
+        if not self.transfers:
+            raise RuntimeError("Transport has no transfers")
+        return self.transfers[0].player
 
     def find_escape_route(self) -> Optional[ControlPoint]:
         raise NotImplementedError
@@ -502,7 +511,7 @@ class MultiGroupTransport(MissionTarget, Transport):
 
     @property
     def coalition(self) -> Coalition:
-        return self.origin.coalition
+        return self.origin.coalition.game.coalition_for(self.player_owned)
 
 
 class Convoy(MultiGroupTransport):
@@ -662,7 +671,7 @@ class PendingTransfers:
         return self.pending_transfers.index(transfer)
 
     def network_for(self, control_point: ControlPoint) -> TransitNetwork:
-        return self.game.transit_network_for(control_point.captured)
+        return self.game.transit_network_for(self.player)
 
     def arrange_transport(
         self, transfer: TransferOrder, now: datetime, events: GameUpdateEvents
@@ -687,6 +696,22 @@ class PendingTransfers:
             now, events
         )
 
+    def validate_transfer(self, transfer: TransferOrder) -> None:
+        if transfer.player != self.player:
+            raise ValueError(
+                "Transfer ownership does not match the collection's player"
+            )
+        if transfer.player.is_neutral:
+            raise ValueError("Neutral transfers are not allowed")
+        if transfer.origin.captured != transfer.player:
+            raise ValueError("Transfer origin is not owned by the transfer coalition")
+        if transfer.destination.captured != transfer.player:
+            raise ValueError(
+                "Transfer destination is not owned by the transfer coalition"
+            )
+        network = self.network_for(transfer.position)
+        network.shortest_path_between(transfer.position, transfer.destination)
+
     def new_transfer(
         self,
         transfer: TransferOrder,
@@ -696,6 +721,7 @@ class PendingTransfers:
         assert (
             transfer.player == self.player
         ), "Transfer ownership does not match the collection's player"
+        self.validate_transfer(transfer)
         if events is None:
             from game.sim import GameUpdateEvents
 
@@ -792,8 +818,8 @@ class PendingTransfers:
         if transfer.transport is not None:
             self.cancel_transport(transfer.transport, transfer, events)
         self.pending_transfers.remove(transfer)
-        transfer.origin.base.commission_units(transfer.units)
-        events.update_motorpools_at(transfer.origin)
+        transfer.disband()
+        events.update_motorpools_at(transfer.origin, transfer.position)
         events.update_supply_routes()
         if publish_events:
             from game.server import EventStream

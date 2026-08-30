@@ -396,11 +396,17 @@ def test_motorpool_in_transit_units_survive_origin_capture(
     )
     game.coalitions = [blue_coalition, red_coalition]
     origin.coalition = blue_coalition
-    destination = SimpleNamespace(name="destination")
+    # Unified new_transfer validates destination ownership and reachability
+    # before mutating; the stub destination is BLUE-owned and the stub network
+    # always has a path.
+    destination = SimpleNamespace(name="destination", captured=Player.BLUE)
     transfer = TransferOrder(
         origin, cast(Any, destination), {abrams: 1}, player=Player.BLUE
     )
     origin.base.commit_losses = lambda _units: None
+    cast(Any, blue_transfers).network_for = lambda _cp: SimpleNamespace(
+        shortest_path_between=lambda _o, _d: []
+    )
     blue_transfers.new_transfer(transfer, datetime.now())
 
     origin.captured = Player.RED
@@ -433,7 +439,10 @@ def test_new_transfer_emits_motorpool_tgo_update(
     )
     tgo = MotorpoolGroundObject("pool", location, cp, None)  # type: ignore[arg-type]
     cp.ground_objects = [tgo]
-    destination = SimpleNamespace()
+    # Unified new_transfer validates destination ownership and reachability
+    # before mutating; the stub destination is BLUE-owned and the stub network
+    # always has a path.
+    destination = SimpleNamespace(captured=Player.BLUE)
     transfer = TransferOrder(
         cast("ControlPoint", cp),
         cast("ControlPoint", destination),
@@ -444,6 +453,9 @@ def test_new_transfer_emits_motorpool_tgo_update(
     pending.pending_transfers = []
     pending.player = Player.BLUE
     cast(Any, pending).arrange_transport = lambda _transfer, _now, _events: None
+    cast(Any, pending).network_for = lambda _cp: SimpleNamespace(
+        shortest_path_between=lambda _o, _d: []
+    )
     events = GameUpdateEvents()
 
     pending.new_transfer(transfer, datetime.now(), events)

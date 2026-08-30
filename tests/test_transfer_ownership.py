@@ -25,6 +25,11 @@ class HashableCP(SimpleNamespace):
     def __hash__(self) -> int:  # type: ignore[override]
         return id(self)
 
+    def is_friendly(self, to_player: Player) -> bool:
+        # Owner-safe cancellation disbands at the transfer's current position,
+        # which consults the control point's friendliness to the transfer owner.
+        return self.captured == to_player
+
 
 def _cp(name: str, captured: Player = Player.BLUE) -> Any:
     """A minimal control-point stand-in for transfer tests."""
@@ -39,7 +44,13 @@ def _cp(name: str, captured: Player = Player.BLUE) -> Any:
 
 def _make_pending(player: Player) -> PendingTransfers:
     """A PendingTransfers with arrange_transport stubbed out."""
-    game = SimpleNamespace(transit_network_for=lambda _p: object())
+    # Unified new_transfer validates reachability before mutating; give the
+    # stub network a shortest_path_between that always succeeds.
+    game = SimpleNamespace(
+        transit_network_for=lambda _p: SimpleNamespace(
+            shortest_path_between=lambda _o, _d: []
+        )
+    )
     pending = PendingTransfers(cast(Any, game), player)
     cast(Any, pending).arrange_transport = lambda _transfer, _now, _events: None
     return pending

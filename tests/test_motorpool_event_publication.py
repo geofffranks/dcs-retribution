@@ -46,6 +46,11 @@ class HashableCP(SimpleNamespace):
     def __hash__(self) -> int:  # type: ignore[override]
         return id(self)
 
+    def is_friendly(self, to_player: Player) -> bool:
+        # Owner-safe cancellation disbands at the transfer's current position,
+        # which consults the control point's friendliness to the transfer owner.
+        return self.captured == to_player
+
 
 def _unit_type() -> GroundUnitType:
     return next(GroundUnitType.for_dcs_type(Armor.M_1_Abrams))
@@ -90,7 +95,11 @@ def _make_pending(
     stub_arrange: bool = True,
 ) -> PendingTransfers:
     game = SimpleNamespace(
-        transit_network_for=lambda _p: object(),
+        # Unified new_transfer validates reachability before mutating; give the
+        # stub network a shortest_path_between that always succeeds.
+        transit_network_for=lambda _p: SimpleNamespace(
+            shortest_path_between=lambda _o, _d: []
+        ),
         ato_for=lambda _p: SimpleNamespace(
             add_package=lambda _pkg: None,
             remove_package=lambda _pkg: None,

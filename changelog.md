@@ -7,6 +7,7 @@
 * **[Mission Generation]** Carriers now steer for approximately 25 kt of wind over the angled landing deck with near-zero crosswind; ship definitions support a `landing_deck_angle` offset.
 * **[UX]** Add per-tanker orbit-speed controls with Auto and bounded manual KIAS modes.
 * **[Mission Generator]** F-14BU Tomcat loads up to 8 preplanned strike targets into the DTC as ST1–ST8, with matching kneeboard labels.
+* **[Ground Forces]** Enable OPFOR ground-unit transfers and buy/sell management behind the OPFOR cheat setting.
 * **[Kneeboard]** Use a light-grey daytime kneeboard background instead of near-white, to avoid glare under HDR / Auto-HDR while staying readable in daylight.
 * **[UX]** Hovering a friendly flight's route line on the map highlights it in yellow, and clicking it selects that flight's package (and the flight) in the ATO sidebar.
 * **[UX]** Press Delete with a package selected in the Packages list to cancel it, making it quick to clear several packages in a row.

@@ -398,10 +398,14 @@ class TransferModel(QAbstractListModel):
 
     @property
     def transfers(self) -> PendingTransfers:
-        return self.game_model.game.coalition_for(player=Player.BLUE).transfers
+        return self._transfers_for(Player.BLUE)
 
     def _transfers_for(self, player: Player) -> PendingTransfers:
         return self.game_model.game.coalition_for(player=player).transfers
+
+    @property
+    def red_visible(self) -> bool:
+        return self._red_visible
 
     def _is_transfer_authorized(self, transfer: TransferOrder) -> bool:
         """Whether the UI is allowed to mutate this transfer's ownership."""
@@ -433,6 +437,10 @@ class TransferModel(QAbstractListModel):
         self.beginResetModel()
         self._red_visible = new_red_visible
         self.endResetModel()
+        self.layoutAboutToBeChanged.emit()
+        self.layoutChanged.emit()
+        if self.rowCount():
+            self.dataChanged.emit(self.index(0), self.index(self.rowCount() - 1))
 
     def on_sim_update(self, _events: GameUpdateEvents) -> None:
         """Refresh pending transfers replaced during turn processing."""
@@ -466,20 +474,24 @@ class TransferModel(QAbstractListModel):
         """Updates the game with the new unit transfer."""
         if not self._is_transfer_authorized(transfer):
             return
+        transfers = self._transfers_for(self.owner_of(transfer))
         visible = transfer.player.is_blue or (
             transfer.player.is_red and self._red_visible
         )
+        insert_row = (
+            transfers.pending_transfer_count
+            if transfer.player.is_blue
+            else self.rowCount()
+        )
+        # Validate before any row signaling so a rejected transfer (for example
+        # one whose destination is no longer owned by its coalition) produces no
+        # insert signals.
+        transfers.validate_transfer(transfer)
         if visible:
-            if transfer.player.is_blue:
-                insert_row = len(self._transfers_for(Player.BLUE).pending_transfers)
-            else:
-                insert_row = self.rowCount()
             self.beginInsertRows(QModelIndex(), insert_row, insert_row)
-        events = GameUpdateEvents()
-        self._transfers_for(self.owner_of(transfer)).new_transfer(transfer, now, events)
+        transfers.new_transfer(transfer, now)
         if visible:
             self.endInsertRows()
-        EventStream.put_nowait(events)
         self.inventory_changed.emit()
 
     def cancel_transfer_at_index(self, index: QModelIndex) -> None:
@@ -493,10 +505,8 @@ class TransferModel(QAbstractListModel):
         transfers = self._transfers_for(self.owner_of(transfer))
         index = self._all_transfers().index(transfer)
         self.beginRemoveRows(QModelIndex(), index, index)
-        events = GameUpdateEvents()
-        transfers.cancel_transfer(transfer, events)
+        transfers.cancel_transfer(transfer)
         self.endRemoveRows()
-        EventStream.put_nowait(events)
         self.inventory_changed.emit()
 
     def transfer_at_index(self, index: QModelIndex) -> TransferOrder:
