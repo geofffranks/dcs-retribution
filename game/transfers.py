@@ -313,7 +313,7 @@ class AirliftPlanner:
 
         home = airfield.position
         pickup = self.transfer.position.position
-        drop_off = self.transfer.position.position
+        drop_off = self.next_stop.position
         if meters(home.distance_to_point(pickup)) > self.HELO_MAX_RANGE:
             return False
 

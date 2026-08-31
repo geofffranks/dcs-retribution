@@ -7,6 +7,7 @@ from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
+from dcs.mapping import Point
 from PySide6.QtCore import QPoint
 from PySide6.QtGui import QContextMenuEvent
 from PySide6.QtWidgets import QApplication, QLabel, QMenu
@@ -15,7 +16,12 @@ from game.purchaseadapter import GroundUnitPurchaseAdapter
 from game.migrator import Migrator
 from game.theater.base import Base
 from game.theater.player import Player
-from game.transfers import MultiGroupTransport, PendingTransfers, TransferOrder
+from game.transfers import (
+    AirliftPlanner,
+    MultiGroupTransport,
+    PendingTransfers,
+    TransferOrder,
+)
 from game.theater.transitnetwork import TransitNetwork
 from qt_ui.models import TransferModel
 from qt_ui.windows.PendingTransfersDialog import PendingTransfersDialog
@@ -237,11 +243,11 @@ def test_transfer_model_refreshes_rows_when_red_visibility_changes(
     model_resets = []
     layouts = []
     data_changes = []
-    model.modelAboutToBeReset.connect(lambda: model_resets.append("about"))
-    model.modelReset.connect(lambda: model_resets.append("reset"))
-    model.layoutAboutToBeChanged.connect(lambda: layouts.append("about"))
-    model.layoutChanged.connect(lambda: layouts.append("changed"))
-    model.dataChanged.connect(lambda *_args: data_changes.append(True))
+    cast(Any, model).modelAboutToBeReset.connect(lambda: model_resets.append("about"))
+    cast(Any, model).modelReset.connect(lambda: model_resets.append("reset"))
+    cast(Any, model).layoutAboutToBeChanged.connect(lambda: layouts.append("about"))
+    cast(Any, model).layoutChanged.connect(lambda: layouts.append("changed"))
+    cast(Any, model).dataChanged.connect(lambda *_args: data_changes.append(True))
 
     assert model.rowCount() == 1
     settings.enable_enemy_buy_sell = True
@@ -534,6 +540,41 @@ def test_transport_identity_uses_contained_transfer_owner_after_capture() -> Non
     assert convoy.coalition is blue_coalition
 
 
+def test_airlift_rejects_helicopter_when_pickup_to_drop_off_exceeds_range() -> None:
+    max_range = AirliftPlanner.HELO_MAX_RANGE.meters
+    home = Point(0, 0, None)  # type: ignore[arg-type]
+    pickup = Point(-0.6 * max_range, 0, None)  # type: ignore[arg-type]
+    drop_off = Point(0.6 * max_range, 0, None)  # type: ignore[arg-type]
+    transfer = cast(
+        Any,
+        SimpleNamespace(
+            origin=SimpleNamespace(can_operate=lambda _unit_type: True),
+            player=Player.BLUE,
+            position=SimpleNamespace(position=pickup),
+        ),
+    )
+    next_stop = cast(
+        Any,
+        SimpleNamespace(
+            can_operate=lambda _unit_type: True,
+            position=drop_off,
+        ),
+    )
+    planner = object.__new__(AirliftPlanner)
+    planner.transfer = transfer
+    planner.next_stop = next_stop
+    helicopter = cast(
+        Any,
+        SimpleNamespace(
+            capable_of=lambda _task: True,
+            dcs_unit_type=SimpleNamespace(helicopter=True),
+        ),
+    )
+    airfield = cast(Any, SimpleNamespace(position=home))
+
+    assert not planner.compatible_with_mission(helicopter, airfield)
+
+
 def test_transfer_model_does_not_begin_insert_for_rejected_transfer(
     app: QApplication,
 ) -> None:
@@ -558,8 +599,8 @@ def test_transfer_model_does_not_begin_insert_for_rejected_transfer(
     transfer = TransferOrder(origin, destination, {unit_type: 1}, player=Player.RED)
     about_to_insert = []
     inserted = []
-    model.rowsAboutToBeInserted.connect(lambda: about_to_insert.append(True))
-    model.rowsInserted.connect(lambda: inserted.append(True))
+    cast(Any, model).rowsAboutToBeInserted.connect(lambda: about_to_insert.append(True))
+    cast(Any, model).rowsInserted.connect(lambda: inserted.append(True))
 
     with pytest.raises(ValueError, match="destination"):
         model.new_transfer(transfer, SimpleNamespace())
