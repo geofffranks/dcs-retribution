@@ -2,13 +2,7 @@
 
 ## Features/Improvements
 * **[Mission Generator]** Motorpool target missions now match their mission-type counterparts: STRIKE keeps one player target waypoint per parked vehicle with one AI bombing task per vehicle at ingress; BAI gets a single player target-area waypoint with one AI engage task per unit-type group at ingress; armed recon gets a single player target waypoint with a garage-centered engagement zone sized to a full 5x5 parked grid plus 20 m, independent of the configured engagement range.
-* **[Mission Generator]** Per-squadron QRA interceptor reserve: OPFOR (and opt-in OWNFOR) squadrons scramble in-air interceptors via the Moose AI_A2A_DISPATCHER against incoming air-to-ground raids detected by the IADS/EWR network. Scramble/engage radius, spawn altitude, grouping, and radio callouts are campaign-doctrine settings.
-* **[Mission Generator]** Keep carriers and LHAs clear of the shore during movement and mission generation, with configurable standoff warnings.
-* **[UX]** Add per-tanker orbit-speed controls with Auto and bounded manual KIAS modes.
-* **[Mission Generation]** Carriers now steer for approximately 25 kt of wind over the angled landing deck with near-zero crosswind; ship definitions support a `landing_deck_angle` offset.
-* **[UX]** Add per-tanker orbit-speed controls with Auto and bounded manual KIAS modes.
-* **[Mission Generator]** F-14BU Tomcat loads up to 8 preplanned strike targets into the DTC as ST1–ST8, with matching kneeboard labels.
-* **[Ground Forces]** Enable OPFOR ground-unit transfers and buy/sell management behind the OPFOR cheat setting.
+* **[Modding]** Added support for the CurrentHill Iran Military Assets pack: the Shahed-136 launcher, two IRGCN fast-attack craft, and a new `[CH] Iran 2020` faction, behind a New Game mods checkbox. (#886)
 * **[Kneeboard]** Use a light-grey daytime kneeboard background instead of near-white, to avoid glare under HDR / Auto-HDR while staying readable in daylight.
 * **[UX]** Hovering a friendly flight's route line on the map highlights it in yellow, and clicking it selects that flight's package (and the flight) in the ATO sidebar.
 * **[UX]** Press Delete with a package selected in the Packages list to cancel it, making it quick to clear several packages in a row.
