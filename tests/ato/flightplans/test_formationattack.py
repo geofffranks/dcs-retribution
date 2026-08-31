@@ -6,6 +6,7 @@ from typing import Any, cast
 import pytest
 from dcs import Point
 from dcs.terrain import Caucasus, Terrain
+from dcs.vehicles import Armor
 from unittest.mock import MagicMock
 
 from game.ato.flight import Flight
@@ -18,6 +19,8 @@ from game.ato.flightplans.formationattack import (
 from game.ato.flightplans.strike import StrikeFlightPlan
 from game.ato.flighttype import FlightType
 from game.data.groups import GroupTask
+from game.dcs.groundunittype import GroundUnitType
+from game.missiongenerator.motorpoolpopulator import MotorpoolPopulator
 from game.theater import TheaterGroundObject
 from game.theater.controlpoint import ControlPoint
 from game.theater.presetlocation import PresetLocation
@@ -170,6 +173,125 @@ def _motorpool_with_groups(
     )
     target.groups = cast(Any, groups)
     return target
+
+
+def _populate_motorpool(target: MotorpoolGroundObject, count: int) -> None:
+    from game.theater.player import Player
+
+    unit_type = next(GroundUnitType.for_dcs_type(Armor.M_1_Abrams))
+    control_point = target.control_point
+    control_point.base = cast(Any, SimpleNamespace(armor={unit_type: count}))
+    control_point.captured = Player.BLUE
+    control_point.connected_points = []
+    cast(Any, control_point).ground_objects = [target]
+    unit_ids = iter(range(1, 1000))
+    group_ids = iter(range(1, 1000))
+    game = SimpleNamespace(
+        theater=SimpleNamespace(controlpoints=[control_point]),
+        settings=SimpleNamespace(motorpool_enabled=True, motorpool_spawn_cap=10),
+        next_unit_id=lambda: next(unit_ids),
+        next_group_id=lambda: next(group_ids),
+    )
+    MotorpoolPopulator(cast(Any, game)).populate()
+
+
+def test_refreshed_strike_plan_snapshots_live_motorpool_units(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Real-ordering regression: the STRIKE flight plan is built at ATO
+    planning time against an EMPTY motorpool; mission generation later renders
+    the parked units and refreshes motorpool-target plans. The refreshed
+    layout must target one StrikeTarget per parked unit instead of keeping
+    the frozen empty snapshot (which produced a single area waypoint)."""
+
+    class _Captured(Exception):
+        pass
+
+    terrain = Caucasus()
+    target = _motorpool_with_groups(terrain, [])
+    from game.theater.player import Player
+
+    cast(Any, target.control_point).captured = Player.BLUE
+    flight = cast(
+        Any,
+        SimpleNamespace(
+            **vars(cast(Any, _attack_flight(target, FlightType.STRIKE))),
+            coalition=SimpleNamespace(
+                player=Player.BLUE, game=SimpleNamespace(settings=SimpleNamespace())
+            ),
+        ),
+    )
+    captured: list[list[Any]] = []
+
+    def capture(_ingress: Any, targets: list[Any]) -> Any:
+        captured.append(list(targets))
+        raise _Captured
+
+    builder = StrikeFlightPlan.builder_type()(cast(Any, flight))
+    monkeypatch.setattr(builder, "_build", capture)
+    # Package waypoints are pre-supplied by the fixture; skip the generator,
+    # which would need the full navmesh/threat stack.
+    monkeypatch.setattr(
+        builder, "_generate_package_waypoints_if_needed", lambda *args: None
+    )
+
+    # ATO planning time: motorpool groups empty -> frozen empty target list.
+    with pytest.raises(_Captured):
+        builder.get_or_build()
+    assert captured[-1] == []
+
+    # Mission generation: render the units, then refresh the plan.
+    _populate_motorpool(target, 3)
+    with pytest.raises(_Captured):
+        builder.regenerate()
+
+    assert len(captured[-1]) == 3
+
+
+def test_refresh_flight_plan_keeps_manual_timing() -> None:
+    """refresh_flight_plan regenerates the plan without the manual-timing
+    wipe that recreate_flight_plan performs."""
+    takeoff = object()
+    flight = cast(Any, Flight.__new__(Flight))
+    flight.manually_timed = True
+    flight.manual_takeoff_time = takeoff
+    flight._flight_plan_builder = MagicMock()
+
+    flight.refresh_flight_plan()
+
+    flight._flight_plan_builder.regenerate.assert_called_once_with(False)
+    assert flight.manually_timed is True
+    assert flight.manual_takeoff_time is takeoff
+
+
+def test_refresh_targets_only_motorpool_packages() -> None:
+    """Only flights in packages targeting a motorpool are refreshed."""
+    from game.missiongenerator.missiongenerator import (
+        refresh_motorpool_target_flight_plans,
+    )
+
+    motorpool = _motorpool_with_groups(Caucasus(), [])
+    motorpool_flight = MagicMock()
+    regular_flight = MagicMock()
+    game = SimpleNamespace(
+        coalitions=[
+            SimpleNamespace(
+                ato=SimpleNamespace(
+                    packages=[
+                        SimpleNamespace(target=motorpool, flights=[motorpool_flight]),
+                        SimpleNamespace(
+                            target=SimpleNamespace(), flights=[regular_flight]
+                        ),
+                    ]
+                )
+            )
+        ]
+    )
+
+    refresh_motorpool_target_flight_plans(cast(Any, game))
+
+    motorpool_flight.refresh_flight_plan.assert_called_once_with()
+    regular_flight.refresh_flight_plan.assert_not_called()
 
 
 def _attack_flight(target: Any, flight_type: FlightType) -> Flight:
