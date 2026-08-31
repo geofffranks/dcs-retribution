@@ -179,21 +179,20 @@ class FormationAttackBuilder(IBuilder[FlightPlanT, LayoutT], ABC):
         builder = WaypointBuilder(self.flight, targets)
 
         target_waypoints: list[FlightWaypoint] = []
-        is_motorpool = isinstance(self.flight.package.target, MotorpoolGroundObject)
-        if self.flight.flight_type == FlightType.STRIKE and is_motorpool and targets:
-            # Manual STRIKE receives one player-facing waypoint per live unit.
-            for target in targets:
-                target_waypoints.append(
-                    self.target_waypoint(self.flight, builder, target)
-                )
-        elif targets and not is_motorpool:
+        # Mission spec: STRIKE against a motorpool keeps one player-facing
+        # waypoint per parked unit, while motorpool BAI and ARMED_RECON use one
+        # target-area waypoint. Non-motorpool behavior remains per target.
+        is_motorpool = isinstance(self.package.target, MotorpoolGroundObject)
+        if targets and (
+            not is_motorpool or self.flight.flight_type == FlightType.STRIKE
+        ):
             for target in targets:
                 target_waypoints.append(
                     self.target_waypoint(self.flight, builder, target)
                 )
         else:
-            # Motorpools remain one target area for Armed Recon and BAI, while
-            # targetless area-based missions retain their existing fallback.
+            # Targetless missions and motorpool BAI/ARMED_RECON retain the
+            # single target-area waypoint.
             target_waypoints.append(
                 self.target_area_waypoint(
                     self.flight, self.flight.package.target, builder
