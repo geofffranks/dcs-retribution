@@ -8,9 +8,13 @@ from dcs.task import (
     EngageTargetsInZone,
 )
 
+from game.missiongenerator.motorpoolpopulator import motorpool_full_grid_extent_m
 from game.theater.theatergroundobject import MotorpoolGroundObject
 from game.utils import nautical_miles
 from .pydcswaypointbuilder import PydcsWaypointBuilder
+
+# Slack beyond the furthest slot of a full parked grid: 20 m = 60 ft.
+_MOTORPOOL_ZONE_BUFFER_M = 20.0
 
 
 class ArmedReconIngressBuilder(PydcsWaypointBuilder):
@@ -25,29 +29,22 @@ class ArmedReconIngressBuilder(PydcsWaypointBuilder):
             self.flight.coalition.game.settings.armed_recon_engagement_range_distance
         )
         if isinstance(target, MotorpoolGroundObject):
-            unit_positions = [
-                unit.position
-                for group in target.groups
-                for unit in group.units
-                if unit.alive
-            ]
-            radius = (
-                math.ceil(
-                    max(
-                        target.position.distance_to_point(position)
-                        for position in unit_positions
-                    )
-                )
-                + 1
-                if unit_positions
-                else 0
+            # Mission spec: the motorpool zone is centered on the garage (the
+            # TGO position, not the ToT waypoint) and sized to cover a FULL
+            # 5x5 parked grid plus a 20 m buffer. The radius therefore stays
+            # stable no matter how many vehicles are currently rendered, and
+            # the configured engagement range never applies.
+            zone_position = target.position
+            radius = math.ceil(
+                motorpool_full_grid_extent_m() + _MOTORPOOL_ZONE_BUFFER_M
             )
         else:
+            zone_position = self.flight.flight_plan.tot_waypoint.position
             radius = int(nautical_miles(configured_range).meters)
         waypoint.add_task(
             ControlledTask(
                 EngageTargetsInZone(
-                    position=self.flight.flight_plan.tot_waypoint.position,
+                    position=zone_position,
                     radius=radius,
                     targets=[
                         Targets.All.GroundUnits,

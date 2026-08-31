@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -34,6 +35,21 @@ def motorpool_identity(
 
 
 ProjectionKey = tuple[UUID, str, int]
+
+
+def motorpool_full_grid_extent_m() -> float:
+    """Distance from the garage origin to the furthest slot of a FULL grid.
+
+    The grid holds ``_COLUMNS`` columns per row, with rows growing behind the
+    garage (first row ``_GRID_OFFSET_M`` back, then ``_SPACING_M`` per row) and
+    columns stepping ``_SPACING_M`` sideways. The last slot of a full 5x5 grid
+    (row 4, column 4 — the 25th unit) is the furthest a parked vehicle can sit
+    from the garage. Heading-independent, so consumers can use it as a radius
+    bound without knowing the garage orientation.
+    """
+    last_row = _COLUMNS - 1
+    last_column = _COLUMNS - 1
+    return math.hypot(_GRID_OFFSET_M + last_row * _SPACING_M, last_column * _SPACING_M)
 
 
 @dataclass(frozen=True)

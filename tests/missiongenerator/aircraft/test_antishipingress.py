@@ -1,4 +1,5 @@
 import logging
+import math
 from types import SimpleNamespace
 from typing import Any, Callable, cast
 from unittest.mock import MagicMock
@@ -13,6 +14,7 @@ from dcs.task import (
     CarpetBombing,
     ControlledTask,
     EngageTargetsInZone,
+    WeaponType,
 )
 from dcs.terrain import Terrain
 from dcs.vehicles import Armor
@@ -132,6 +134,16 @@ def _motorpool_target(unit_positions: list[Point]) -> MotorpoolGroundObject:
     return target
 
 
+def _motorpool_group(name: str, positions: list[Point]) -> Any:
+    """A fake TheaterGroup as the populator renders them: one group per unit
+    type, named "{tgo.name} ({unit_type})"."""
+    return SimpleNamespace(
+        id=len(name),
+        group_name=name,
+        units=[SimpleNamespace(position=p, alive=True) for p in positions],
+    )
+
+
 def _motorpool_ingress_builder(
     builder_type: type[Any], target: MotorpoolGroundObject
 ) -> tuple[Any, MovingPoint]:
@@ -147,7 +159,11 @@ def _motorpool_ingress_builder(
         ),
         package=SimpleNamespace(target=target),
         flight_plan=SimpleNamespace(
-            tot_waypoint=SimpleNamespace(position=target.position)
+            # Deliberately distinct from the garage position so tests can tell
+            # whether a zone is centered on the TGO or on the ToT waypoint.
+            tot_waypoint=SimpleNamespace(
+                position=Point(500.0, 500.0, MagicMock(spec=Terrain))
+            )
         ),
     )
     builder.register_special_ingress_points = MagicMock()
@@ -156,32 +172,29 @@ def _motorpool_ingress_builder(
     return builder, waypoint
 
 
-def test_strike_motorpool_uses_post_population_units_for_bombing_task() -> None:
+def _populated_motorpool(armor: dict[GroundUnitType, int]) -> MotorpoolGroundObject:
+    """Run a real MotorpoolPopulator pass over a fresh motorpool TGO."""
     target = _motorpool_target([])
     control_point = target.control_point
-    unit_type = next(GroundUnitType.for_dcs_type(Armor.M_1_Abrams))
-    control_point.base = cast(Any, SimpleNamespace(armor={unit_type: 1}))
+    control_point.base = cast(Any, SimpleNamespace(armor=armor))
     control_point.connected_points = []
     cast(Any, control_point).ground_objects = [target]
 
-    counters = {"unit": 0, "group": 0}
-
-    def next_unit_id() -> int:
-        counters["unit"] += 1
-        return counters["unit"]
-
-    def next_group_id() -> int:
-        counters["group"] += 1
-        return counters["group"]
-
+    unit_ids = iter(range(1, 1000))
+    group_ids = iter(range(1, 1000))
     game = SimpleNamespace(
         theater=SimpleNamespace(controlpoints=[control_point]),
         settings=SimpleNamespace(motorpool_enabled=True, motorpool_spawn_cap=10),
-        next_unit_id=next_unit_id,
-        next_group_id=next_group_id,
+        next_unit_id=lambda: next(unit_ids),
+        next_group_id=lambda: next(group_ids),
     )
     MotorpoolPopulator(cast(Any, game)).populate()
+    return target
 
+
+def _strike_ingress_builder(
+    target: MotorpoolGroundObject,
+) -> tuple[Any, MovingPoint]:
     builder: Any = object.__new__(StrikeIngressBuilder)
     builder.group = SimpleNamespace(
         units=[SimpleNamespace(unit_type=A_10C)], task="Ground Attack"
@@ -195,35 +208,104 @@ def test_strike_motorpool_uses_post_population_units_for_bombing_task() -> None:
     )
     builder.register_special_ingress_points = MagicMock()
     waypoint = MovingPoint(target.position)
+    return builder, waypoint
 
-    builder.add_tasks(waypoint)
 
-    assert [
+def test_strike_motorpool_bombing_tasks_are_one_per_unit() -> None:
+    """Spec: motorpool STRIKE gets one AI bombing task per parked unit at the
+    ingress waypoint, each aimed at that unit's position — not a single
+    centroid/carpet task over the whole park."""
+    unit_type = next(GroundUnitType.for_dcs_type(Armor.M_1_Abrams))
+    target = _populated_motorpool({unit_type: 3})
+    unit_positions = {
+        (unit.position.x, unit.position.y)
+        for group in target.groups
+        for unit in group.units
+    }
+    assert len(unit_positions) == 3
+
+    builder, waypoint = _strike_ingress_builder(target)
+
+    cast(Any, builder).add_tasks(waypoint)
+
+    bombing = [
+        task
+        for task in waypoint.tasks
+        if isinstance(task, Bombing)
+        and task.params["weaponType"] == WeaponType.Bombs.value
+    ]
+    assert len(bombing) == len(unit_positions)
+    assert {(task.params["x"], task.params["y"]) for task in bombing} == (
+        unit_positions
+    )
+
+
+def test_strike_motorpool_empty_reserve_adds_no_bombing_tasks() -> None:
+    """Spec: an empty motorpool reserve adds nothing — no bombing tasks at the
+    ingress waypoint."""
+    target = _populated_motorpool({})
+    assert not [unit for group in target.groups for unit in group.units]
+
+    builder, waypoint = _strike_ingress_builder(target)
+
+    cast(Any, builder).add_tasks(waypoint)
+
+    assert not [
         task for task in waypoint.tasks if isinstance(task, (Bombing, CarpetBombing))
     ]
 
 
-def test_bai_motorpool_uses_one_zone_task_for_rendered_units() -> None:
-    target = _motorpool_target(
-        [
-            Point(3.0, 4.0, MagicMock(spec=Terrain)),
-            Point(0.0, 10.0, MagicMock(spec=Terrain)),
-        ]
-    )
+def test_bai_motorpool_engages_each_unit_type_group() -> None:
+    """Spec: motorpool BAI gets one AttackGroup task per unit-type group at the
+    ingress waypoint — the populator builds one group per unit type, named
+    "{tgo.name} ({unit_type})" — matching the shape of non-motorpool BAI group
+    engagement. The old single EngageTargetsInZone task is gone."""
+    target = _motorpool_target([])
+    target.groups = [
+        _motorpool_group(
+            "Motorpool (M-1 Abrams)", [Point(3.0, 4.0, MagicMock(spec=Terrain))]
+        ),
+        _motorpool_group(
+            "Motorpool (T-90)", [Point(0.0, 10.0, MagicMock(spec=Terrain))]
+        ),
+    ]
     builder, waypoint = _motorpool_ingress_builder(BaiIngressBuilder, target)
+    miz_groups = {
+        "Motorpool (M-1 Abrams)": SimpleNamespace(id=11),
+        "Motorpool (T-90)": SimpleNamespace(id=22),
+    }
+    builder.mission.find_group.side_effect = lambda name: miz_groups[name]
 
     cast(Any, builder).add_tasks(waypoint)
 
-    zone_tasks = [
+    attacks = [task for task in waypoint.tasks if isinstance(task, AttackGroup)]
+    assert sorted(task.params["groupId"] for task in attacks) == [11, 22]
+    assert not [
         task for task in waypoint.tasks if isinstance(task, EngageTargetsInZone)
     ]
-    assert len(zone_tasks) == 1
-    assert not [task for task in waypoint.tasks if isinstance(task, AttackGroup)]
-    assert zone_tasks[0].params["zoneRadius"] == 11
-    builder.mission.find_group.assert_not_called()
 
 
-def test_armed_recon_motorpool_radius_uses_rendered_units_only() -> None:
+# Spec: the armed-recon motorpool zone reaches the furthest slot of a FULL 5x5
+# parked grid — 4 rows behind the garage (45.72 m + 3 more rows at 12 m
+# spacing) and 4 columns (12 m spacing) beside it — plus a 20 m (60 ft) buffer.
+# The radius is stable regardless of how many units are rendered and is never
+# taken from the configured engagement range.
+_FULL_GRID_RADIUS_M = math.ceil(math.hypot(45.72 + 4 * 12.0, 4 * 12.0) + 20)
+
+
+def _motorpool_zone_task(waypoint: MovingPoint) -> Any:
+    return next(
+        task
+        for task in waypoint.tasks
+        if isinstance(task, ControlledTask)
+        and task.params["task"]["id"] == "EngageTargetsInZone"
+    )
+
+
+def test_armed_recon_motorpool_zone_is_garage_centered_full_grid() -> None:
+    """Spec: the zone is centered on the garage (the TGO position, not the ToT
+    waypoint) and sized to a FULL 5x5 grid plus 20 m. The fixture's configured
+    engagement range is 5 NM (~9260 m) and must never size this zone."""
     target = _motorpool_target(
         [
             Point(6.0, 8.0, MagicMock(spec=Terrain)),
@@ -234,25 +316,20 @@ def test_armed_recon_motorpool_radius_uses_rendered_units_only() -> None:
 
     cast(Any, builder).add_tasks(waypoint)
 
-    task = next(
-        task
-        for task in waypoint.tasks
-        if isinstance(task, ControlledTask)
-        and task.params["task"]["id"] == "EngageTargetsInZone"
-    )
-    assert task.params["task"]["params"]["zoneRadius"] == 11
+    params = _motorpool_zone_task(waypoint).params["task"]["params"]
+    assert params["zoneRadius"] == _FULL_GRID_RADIUS_M
+    assert (params["x"], params["y"]) == (target.position.x, target.position.y)
 
 
-def test_armed_recon_motorpool_empty_target_has_zero_radius() -> None:
+def test_armed_recon_motorpool_radius_is_stable_when_empty() -> None:
+    """Spec: 'full 5x5 grid' means the radius does not depend on how many
+    vehicles are currently rendered — an empty motorpool gets the same
+    garage-centered zone as a full one (the old behavior was a zero radius)."""
     target = _motorpool_target([])
     builder, waypoint = _motorpool_ingress_builder(ArmedReconIngressBuilder, target)
 
     cast(Any, builder).add_tasks(waypoint)
 
-    task = next(
-        task
-        for task in waypoint.tasks
-        if isinstance(task, ControlledTask)
-        and task.params["task"]["id"] == "EngageTargetsInZone"
-    )
-    assert task.params["task"]["params"]["zoneRadius"] == 0
+    params = _motorpool_zone_task(waypoint).params["task"]["params"]
+    assert params["zoneRadius"] == _FULL_GRID_RADIUS_M
+    assert (params["x"], params["y"]) == (target.position.x, target.position.y)

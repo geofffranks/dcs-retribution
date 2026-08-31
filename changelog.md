@@ -1,6 +1,7 @@
 # Retribution v1.6.0
 
 ## Features/Improvements
+* **[Mission Generator]** Motorpool target missions now match their mission-type counterparts: STRIKE keeps one player target waypoint per parked vehicle with one AI bombing task per vehicle at ingress; BAI gets a single player target-area waypoint with one AI engage task per unit-type group at ingress; armed recon gets a single player target waypoint with a garage-centered engagement zone sized to a full 5x5 parked grid plus 20 m, independent of the configured engagement range.
 * **[Mission Generator]** Per-squadron QRA interceptor reserve: OPFOR (and opt-in OWNFOR) squadrons scramble in-air interceptors via the Moose AI_A2A_DISPATCHER against incoming air-to-ground raids detected by the IADS/EWR network. Scramble/engage radius, spawn altitude, grouping, and radio callouts are campaign-doctrine settings.
 * **[Mission Generator]** Keep carriers and LHAs clear of the shore during movement and mission generation, with configurable standoff warnings.
 * **[UX]** Add per-tanker orbit-speed controls with Auto and bounded manual KIAS modes.

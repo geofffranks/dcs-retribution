@@ -11,6 +11,7 @@ from dcs import Point
 
 from game.flightplan import HoldZoneGeometry
 from game.theater import MissionTarget
+from game.theater.theatergroundobject import MotorpoolGroundObject
 from game.utils import nautical_miles, Speed, feet
 from .flightplan import FlightPlan
 from .formation import FormationFlightPlan, FormationLayout
@@ -178,16 +179,26 @@ class FormationAttackBuilder(IBuilder[FlightPlanT, LayoutT], ABC):
         builder = WaypointBuilder(self.flight, targets)
 
         target_waypoints: list[FlightWaypoint] = []
-        if targets:
-            # Live target lists — including motorpool BAI/STRIKE — receive one
-            # player-facing waypoint per target.
+        # Mission spec: STRIKE against a motorpool keeps one player-facing
+        # waypoint per parked unit, but any other motorpool mission (BAI,
+        # ARMED_RECON) gets a single target-area waypoint for the motorpool
+        # total. Non-motorpool behavior is unchanged: live target lists keep
+        # one player-facing waypoint per target. The player/AI gating itself
+        # lives in the waypoint builders (only_for_player), filtered by
+        # client_count at mission generation.
+        motorpool_area_mission = (
+            isinstance(self.package.target, MotorpoolGroundObject)
+            and self.flight.flight_type != FlightType.STRIKE
+        )
+        if targets and not motorpool_area_mission:
             for target in targets:
                 target_waypoints.append(
                     self.target_waypoint(self.flight, builder, target)
                 )
         else:
             # Targetless missions (e.g. an empty motorpool snapshot before
-            # mission generation) retain the single target-area fallback.
+            # mission generation) and motorpool BAI/ARMED_RECON retain the
+            # single target-area waypoint.
             target_waypoints.append(
                 self.target_area_waypoint(
                     self.flight, self.flight.package.target, builder
