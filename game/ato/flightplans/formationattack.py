@@ -190,6 +190,17 @@ class FormationAttackBuilder(IBuilder[FlightPlanT, LayoutT], ABC):
                 target_waypoints.append(
                     self.target_waypoint(self.flight, builder, target)
                 )
+        elif self.flight.flight_type == FlightType.BAI and isinstance(
+            self.package.target, MotorpoolGroundObject
+        ):
+            # Mission spec: motorpool BAI gets one waypoint for the motorpool
+            # total, named the way every other BAI flight names its target
+            # waypoint ("ATTACK ..."), not a strike-style area name.
+            target_waypoints.append(
+                builder.bai_group(
+                    StrikeTarget(self.package.target.name, self.package.target)
+                )
+            )
         else:
             # Targetless missions and motorpool BAI/ARMED_RECON retain the
             # single target-area waypoint.

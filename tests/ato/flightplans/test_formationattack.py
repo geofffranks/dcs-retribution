@@ -222,12 +222,12 @@ def _layout_with_fake_builder(
     return cast(FormationAttackLayout, builder.layout())
 
 
-def test_motorpool_bai_with_live_groups_uses_single_area_waypoint(
+def test_motorpool_bai_with_live_groups_uses_single_bai_named_waypoint(
     monkeypatch: Any,
 ) -> None:
-    """Spec: motorpool BAI gets ONE target waypoint for the motorpool total —
-    the same target-area waypoint naming targetless BAI flights use — not one
-    waypoint per unit-type group."""
+    """Spec: motorpool BAI gets ONE target waypoint for the motorpool total,
+    named the way other BAI flights name theirs ("ATTACK ...") — not one
+    waypoint per unit-type group and not a strike-style area name."""
     terrain = Caucasus()
     group = cast(Any, SimpleNamespace(units=[object()], group_name="Armor"))
     target = _motorpool_with_groups(terrain, [group])
@@ -259,7 +259,7 @@ def test_motorpool_bai_with_live_groups_uses_single_area_waypoint(
     )
 
     assert len(layout.targets) == 1
-    assert layout.targets[0].name == "STRIKE AREA"
+    assert layout.targets[0].name == "BAI GROUP"
 
 
 def test_non_motorpool_bai_keeps_per_target_waypoints(monkeypatch: Any) -> None:
