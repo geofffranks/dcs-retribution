@@ -499,7 +499,8 @@ def _control_point_game(
         ),
     )
     cp.theater = game.theater
-    cp._coalition.game = game
+    assert cp._coalition is not None
+    cast(Any, cp._coalition).game = game
     monkeypatch.setattr(
         "game.server.controlpoints.routes.Point.from_latlng",
         staticmethod(lambda latlng, terrain: Point(latlng.lat, latlng.lng, None)),  # type: ignore[arg-type]

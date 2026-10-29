@@ -122,6 +122,19 @@ def test_render_basemap_legacy_fallback_wide_east_west_uses_gif_crop(
     gif_spy.assert_called()
 
 
+@pytest.mark.parametrize(
+    "extent",
+    [
+        MapExtent(-100_000, 2_000_000, -100_000, 2_000_000, Caucasus()),
+        MapExtent(-20_000_000, -19_000_000, -20_000_000, -19_000_000, Caucasus()),
+    ],
+)
+def test_gif_crop_declines_extents_outside_terrain_bounds(extent: MapExtent) -> None:
+    synthetic_gif = Image.new("RGB", (200, 200), (50, 90, 130))
+    with patch.object(basemap, "_load_gif", return_value=synthetic_gif):
+        assert basemap._crop_from_gif(extent, 400, 400) is None
+
+
 def test_detail_threshold_is_5km() -> None:
     assert DETAIL_THRESHOLD_M == 5_000.0
 

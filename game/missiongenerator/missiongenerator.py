@@ -246,7 +246,8 @@ class MissionGenerator:
         used multiple times.
         """
         for beacon in Beacons.iter_theater(self.game.theater):
-            unique_map_frequencies.add(beacon.frequency)
+            if beacon.frequency is not None:
+                unique_map_frequencies.add(beacon.frequency)
             if beacon.occupies_tacan_channel:
                 if (channel := beacon.tacan_channel) is None:
                     logging.warning(f"TACAN beacon has no channel: {beacon.callsign}")

@@ -181,7 +181,7 @@ def _populate_motorpool(target: MotorpoolGroundObject, count: int) -> None:
     unit_type = next(GroundUnitType.for_dcs_type(Armor.M_1_Abrams))
     control_point = target.control_point
     control_point.base = cast(Any, SimpleNamespace(armor={unit_type: count}))
-    control_point.captured = Player.BLUE
+    cast(Any, control_point).captured = Player.BLUE
     control_point.connected_points = []
     cast(Any, control_point).ground_objects = [target]
     unit_ids = iter(range(1, 1000))

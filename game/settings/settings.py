@@ -1062,6 +1062,23 @@ class Settings:
             "threats on the target recon kneeboard. 0 uses the default radius only."
         ),
     )
+    generate_helicopter_navigation_kneeboard: bool = boolean_option(
+        "Generate helicopter navigation kneeboard",
+        MISSION_GENERATOR_PAGE,
+        GAMEPLAY_SECTION,
+        default=True,
+        detail="Add route maps and nearby VOR/NDB directory pages to player helicopter kneeboards.",
+    )
+    helicopter_navigation_corridor_nmi: float = bounded_float_option(
+        "Helicopter navigation station corridor (nm)",
+        page=MISSION_GENERATOR_PAGE,
+        section=GAMEPLAY_SECTION,
+        default=25.0,
+        min=0.0,
+        max=100.0,
+        divisor=1,
+        detail="Maximum distance on either side of a planned route leg for listing VOR/NDB stations.",
+    )
     never_delay_player_flights: bool = boolean_option(
         "Player flights ignore TOT and spawn immediately",
         MISSION_GENERATOR_PAGE,

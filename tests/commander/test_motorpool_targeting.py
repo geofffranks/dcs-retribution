@@ -236,9 +236,9 @@ def test_motorpool_targeting_matches_shared_projection_across_tgos() -> None:
         GroupTask.MOTORPOOL,
     )
     secondary.distance_to = MagicMock(return_value=100.0)  # type: ignore[method-assign]
-    cp.ground_objects = [primary, secondary]
+    cast(Any, cp).ground_objects = [primary, secondary]
     game = _game([cp, _friendly_cp()], cap=10)
-    cp.coalition.game = game
+    cast(Any, cp.coalition).game = game
 
     targets = list(ObjectiveFinder(cast("Game", game), Player.BLUE).motorpool_targets())
 

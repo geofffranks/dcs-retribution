@@ -562,7 +562,7 @@ def test_sim_update_resets_rows_when_pending_transfers_are_replaced(
     model = TransferModel(game_model)
     resets: list[int] = []
     inventory_refreshes: list[int] = []
-    model.modelReset.connect(lambda: resets.append(1))
+    cast(Any, model).modelReset.connect(lambda: resets.append(1))
     model.inventory_changed.connect(lambda: inventory_refreshes.append(1))
 
     blue.pending_transfers = []
@@ -586,7 +586,7 @@ def test_sim_update_resets_rows_when_pending_transfer_is_removed(
     game_model.sim_controller = sim_controller
     model = TransferModel(game_model)
     resets: list[int] = []
-    model.modelReset.connect(lambda: resets.append(1))
+    cast(Any, model).modelReset.connect(lambda: resets.append(1))
 
     blue.pending_transfers.remove(transfer)
     sim_controller.sim_update.emit(GameUpdateEvents())

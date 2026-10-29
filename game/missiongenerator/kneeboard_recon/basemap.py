@@ -47,12 +47,12 @@ _GRID_LINE = (200, 190, 170)
 # OFFLINE banner styling.
 _OFFLINE_BAND_H = 24
 _OFFLINE_BAND_RGB = (180, 25, 25)
-_OFFLINE_TEXT_DEFAULT = "OFFLINE — basemap unavailable"
+_OFFLINE_TEXT_DEFAULT = "OFFLINE - basemap unavailable"
 # Shown when the tile compositor refused due to MAX_TILE_COUNT — the cause
 # is "area too large for the chosen zoom", which the user can actually
 # address (shrink the corridor or extra-threat-search radius). The generic
 # "basemap unavailable" message would imply a network problem instead.
-_OFFLINE_TEXT_TILE_CAP = "OFFLINE — area too large for satellite tiles"
+_OFFLINE_TEXT_TILE_CAP = "OFFLINE - area too large for satellite tiles"
 
 _RESOURCES_DIR = Path(__file__).resolve().parents[3] / "resources"
 _THEATERS_DIR = _RESOURCES_DIR / "theaters"
@@ -252,6 +252,13 @@ def _crop_from_gif(
     if gif is None:
         return None
     bounds = extent.terrain.bounds
+    if (
+        extent.min_y < bounds.left
+        or extent.max_y > bounds.right
+        or extent.min_x < bounds.bottom
+        or extent.max_x > bounds.top
+    ):
+        return None
     gif_w, gif_h = gif.size
     px_per_m_x = gif_w / (bounds.right - bounds.left)
     px_per_m_y = gif_h / (bounds.top - bounds.bottom)

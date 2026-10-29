@@ -241,11 +241,12 @@ def test_transfer_model_refreshes_rows_when_red_visibility_changes(
     model_resets = []
     layouts = []
     data_changes = []
-    model.modelAboutToBeReset.connect(lambda: model_resets.append("about"))
-    model.modelReset.connect(lambda: model_resets.append("reset"))
-    model.layoutAboutToBeChanged.connect(lambda: layouts.append("about"))
-    model.layoutChanged.connect(lambda: layouts.append("changed"))
-    model.dataChanged.connect(lambda *_args: data_changes.append(True))
+    typed_model = cast(Any, model)
+    typed_model.modelAboutToBeReset.connect(lambda: model_resets.append("about"))
+    typed_model.modelReset.connect(lambda: model_resets.append("reset"))
+    typed_model.layoutAboutToBeChanged.connect(lambda: layouts.append("about"))
+    typed_model.layoutChanged.connect(lambda: layouts.append("changed"))
+    typed_model.dataChanged.connect(lambda *_args: data_changes.append(True))
 
     assert model.rowCount() == 1
     settings.enable_enemy_buy_sell = True
@@ -568,8 +569,9 @@ def test_transfer_model_does_not_begin_insert_for_rejected_transfer(
     transfer = TransferOrder(origin, destination, {unit_type: 1}, player=Player.RED)
     about_to_insert = []
     inserted = []
-    model.rowsAboutToBeInserted.connect(lambda: about_to_insert.append(True))
-    model.rowsInserted.connect(lambda: inserted.append(True))
+    typed_model = cast(Any, model)
+    typed_model.rowsAboutToBeInserted.connect(lambda: about_to_insert.append(True))
+    typed_model.rowsInserted.connect(lambda: inserted.append(True))
 
     with pytest.raises(ValueError, match="destination"):
         model.new_transfer(transfer, SimpleNamespace())

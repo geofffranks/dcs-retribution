@@ -572,7 +572,7 @@ def test_all_dead_cached_units_are_removed_when_desired_projection_is_empty() ->
     populator.populate()
     tgo.groups[0].units[0].alive = False
     cp.base.armor[gut] = 0
-    cp.base.total_armor = 0
+    cast(Any, cp.base).__dict__["total_armor"] = 0
 
     populator.populate()
 
