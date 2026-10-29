@@ -1,1 +1,18 @@
-{}
+{
+ "metadata": {
+  "terrain": "normandy",
+  "terrain_identity": "Normandy 2.0 (operator-confirmed source)",
+  "coordinate_system": "DCS world metres; x=northing, y=easting; beacons.lua position[1] and position[3]",
+  "source_file": "beacons.zip:beacons/normandy.lua",
+  "source_origin": "user-supplied archive",
+  "source_sha256": "7119e99a8c8aab3d8d5e95c7b2c1361778ff1389f22839929ac1bea7b4fe244b",
+  "dcs_build": "unspecified",
+  "terrain_identity_status": "operator-confirmed",
+  "total_source_records": 0,
+  "imported_records": 0,
+  "unusable_records": 0,
+  "positioned_records": 0,
+  "complete": true
+ },
+ "beacons": {}
+}

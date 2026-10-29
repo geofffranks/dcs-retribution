@@ -367,6 +367,11 @@ def save_dir() -> Path:
     return _create_dir_if_needed(base_path() / "Retribution" / "Saves")
 
 
+def tile_cache_dir() -> Path:
+    """Return the shared basemap tile cache under Retribution saved data."""
+    return _create_dir_if_needed(base_path() / "Retribution" / "TileCache")
+
+
 def pre_pretense_backups_dir() -> Path:
     return _create_dir_if_needed(save_dir() / "PrePretenseBackups")
 

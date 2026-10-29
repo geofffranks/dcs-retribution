@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import IntEnum
@@ -51,12 +52,16 @@ class Beacon:
     name: str
     callsign: str
     beacon_type: BeaconType
-    hertz: int
+    hertz: Optional[int]
     channel: Optional[int]
+    # Exact DCS world coordinates from beacons.lua `position` (x, y, z).
+    # None for legacy catalogs or records without usable source positions.
+    position_x: Optional[float] = None
+    position_y: Optional[float] = None
 
     @property
-    def frequency(self) -> RadioFrequency:
-        return RadioFrequency(self.hertz)
+    def frequency(self) -> Optional[RadioFrequency]:
+        return RadioFrequency(self.hertz) if self.hertz is not None else None
 
     @property
     def is_tacan(self) -> bool:
@@ -74,6 +79,14 @@ class Beacon:
 
 class Beacons:
     _by_terrain: dict[str, dict[str, Beacon]] = {}
+    _metadata_by_terrain: dict[str, dict[str, object]] = {}
+
+    @classmethod
+    def metadata_for_theater(
+        cls, theater: ConflictTheater
+    ) -> Optional[dict[str, object]]:
+        cls._load_for_theater_if_needed(theater)
+        return cls._metadata_by_terrain.get(theater.terrain.name)
 
     @classmethod
     def _load_for_theater_if_needed(cls, theater: ConflictTheater) -> None:
@@ -83,6 +96,7 @@ class Beacons:
         beacons_filename_mapper = {
             "sinaimap": "sinai",
             "germanycw": "germanycoldwar",
+            "marianaislands": "marianas",
         }
         filename = theater.terrain.name.lower()
         filename = beacons_filename_mapper.get(filename, filename)
@@ -90,14 +104,47 @@ class Beacons:
         if not beacons_path.exists():
             raise RuntimeError(f"Beacon file {beacons_path.resolve()} is missing")
 
+        catalog = json.loads(beacons_path.read_text(encoding="utf-8"))
+        records = catalog.get("beacons", catalog) if isinstance(catalog, dict) else {}
+        if isinstance(catalog, dict) and isinstance(catalog.get("metadata"), dict):
+            cls._metadata_by_terrain[theater.terrain.name] = catalog["metadata"]
         beacons = {}
-        for bid, beacon in json.loads(beacons_path.read_text()).items():
+        for bid, beacon in records.items():
+            position = beacon.get("position")
+            if (
+                position is None
+                and beacon.get("position_x") is not None
+                and beacon.get("position_y") is not None
+            ):
+                position = {"x": beacon["position_x"], "y": beacon["position_y"]}
+            if position is None and isinstance(beacon.get("position_geo"), dict):
+                position = beacon["position_geo"]
+            if isinstance(position, dict):
+                position_x = position.get("x")
+                position_y = position.get("y")
+            elif isinstance(position, list) and len(position) >= 2:
+                position_x, position_y = position[0], position[1]
+            else:
+                position_x = position_y = None
+            try:
+                coordinate_x = float(position_x) if position_x is not None else None
+                coordinate_y = float(position_y) if position_y is not None else None
+            except (TypeError, ValueError):
+                coordinate_x = coordinate_y = None
+            if (
+                coordinate_x is not None
+                and coordinate_y is not None
+                and (not math.isfinite(coordinate_x) or not math.isfinite(coordinate_y))
+            ):
+                coordinate_x = coordinate_y = None
             beacons[bid] = Beacon(
                 name=beacon["name"],
                 callsign=beacon["callsign"],
                 beacon_type=BeaconType(beacon["beacon_type"]),
                 hertz=beacon["hertz"],
-                channel=beacon["channel"],
+                channel=beacon.get("channel"),
+                position_x=coordinate_x,
+                position_y=coordinate_y,
             )
         cls._by_terrain[theater.terrain.name] = beacons
 

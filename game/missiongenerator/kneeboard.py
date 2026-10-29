@@ -51,6 +51,7 @@ from game.weather.weather import Weather
 from .aircraft.flightdata import FlightData
 from .briefinggenerator import CommInfo, JtacInfo, MissionInfoGenerator
 from .missiondata import AwacsInfo, TankerInfo
+from .helicopter_navigation_pages import generate_navigation_pages
 from ..persistency import kneeboards_dir
 
 if TYPE_CHECKING:
@@ -192,12 +193,7 @@ class KneeboardPageWriter:
         return "".join(segments + [output]).strip()
 
 
-class KneeboardPage:
-    """Base class for all kneeboard pages."""
-
-    def write(self, path: Path) -> None:
-        """Writes the kneeboard page to the given path."""
-        raise NotImplementedError
+from .kneeboard_page import KneeboardPage
 
 
 @dataclass(frozen=True)
@@ -913,6 +909,19 @@ class KneeboardGenerator(MissionInfoGenerator):
         # Only create the notes page if there are notes to show.
         if notes := self.game.notes:
             pages.append(NotesPage(notes, self.dark_kneeboard))
+
+        if (
+            flight.aircraft_type.helicopter
+            and self.game.settings.generate_helicopter_navigation_kneeboard
+        ):
+            pages.extend(
+                generate_navigation_pages(
+                    flight,
+                    self.game.theater,
+                    self.game.settings.helicopter_navigation_corridor_nmi,
+                    self.dark_kneeboard,
+                )
+            )
 
         if (target_page := self.generate_task_page(flight)) is not None:
             pages.append(target_page)
