@@ -500,13 +500,16 @@ local function test_board_loss_respawn_board_deliver()
     advance(5) -- Boarded fires: pilot L is aboard
 
     heli_event(world_events.S_EVENT_UNIT_LOST, heli_unit("Helo 1", 0, 0))
+    scheduled_poll() -- post-loss poll: the lost pilot settles unattributed
 
     heli_event(world_events.S_EVENT_BIRTH, heli_unit("Helo 1", 0, 0))
     set_in_world("Helo 1", true)
     pickup(my, "Helo 1", "Group D") -- the replacement's own pickup
+    scheduled_poll() -- D's accepted pickup in flight when the poll lands
     advance(5) -- Boarded D fires
     deliver(my, "Helo 1")
     advance(1) -- MOOSE raises Rescued 1s after the delivery
+    scheduled_poll() -- post-delivery poll: settled, no double report
 
     check(sorted_rescued() == "uuid-delivered",
         "delivery reports only the replacement aircraft's own passenger")
@@ -539,17 +542,20 @@ local function test_legitimate_replacement_pickup_inside_old_window()
 
     set_in_world("Helo 1", true)
     pickup(my, "Helo 1", "Group L") -- t0: identity recorded, Boarded due t5
+    scheduled_poll() -- a poll landing before L's Boarded: accepted pickup
     advance(2) -- t2, via the loss event below
     heli_event(world_events.S_EVENT_UNIT_LOST, heli_unit("Helo 1", 0, 0))
 
     set_in_world("Helo 1", true, 202) -- respawn: fresh runtime id
     heli_event(world_events.S_EVENT_BIRTH, heli_unit("Helo 1", 0, 0))
     pickup(my, "Helo 1", "Group N") -- t2: the replacement's real pickup
+    scheduled_poll() -- again before N's Boarded
 
     advance(3) -- t5: the dead lifetime's delayed Boarded arrives
     advance(4) -- t9: the replacement's Boarded arrives
     deliver(my, "Helo 1") -- t9 delivery
     advance(1) -- t10: Rescued callback
+    scheduled_poll() -- post-delivery poll: entry settled, no double report
 
     check(sorted_rescued() == "uuid-new",
         "a real replacement pickup is accepted and delivered despite the "
@@ -687,6 +693,7 @@ local function test_pending_pickup_delivered_before_its_boarding()
     pickup(my, "Helo 1", "Group PA") -- Boarded due t5
     advance(5) -- Boarded PA accepted
     pickup(my, "Helo 1", "Group PB") -- t5: pending, Boarded due t10
+    scheduled_poll() -- PB's accepted pickup in flight when the poll lands
     deliver(my, "Helo 1") -- t5: both handed over before PB's Boarded
 
     check(sorted_rescued() == "uuid-boarded,uuid-pending",
@@ -713,6 +720,7 @@ local function test_single_fast_delivery_credits_once()
     set_in_world("Helo 1", true)
     pickup(my, "Helo 1", "Group F") -- Boarded due t5
     deliver(my, "Helo 1") -- t0: delivered before the Boarded
+    scheduled_poll() -- post-delivery poll: entry already settled done
 
     check(sorted_rescued() == "uuid-fast",
         "a single pickup delivered before its Boarded is credited")
@@ -822,6 +830,33 @@ local function test_cross_coalition_instances_credit_independently()
         "blue and red instances credit their own rescues independently")
 end
 
+-- C3-poll-before-boarded: the pickup removes the survivor from the world and
+-- MOOSE schedules Boarded 5s out — the same cadence as the disappearance
+-- poll. A poll that lands between the accepted pickup and its Boarded sees
+-- the survivor gone with no AI attribution (player helicopters are excluded
+-- from the attribution check); it must leave the entry for its Boarded and
+-- delivery instead of settling it as an unattributed disappearance.
+local function test_poll_before_boarded_does_not_settle_accepted_pickup()
+    local dp = pilot("uuid-inflight", "Group IF", "Survivor IF")
+    setup({ dp })
+    local my = assert(csar_instances[1], "Ops.CSAR instance not built")
+
+    set_in_world("Helo 1", true)
+    scheduled_poll() -- initial poll: survivor alive, position recorded
+
+    pickup(my, "Helo 1", "Group IF") -- accepted: survivor leaves the world
+
+    scheduled_poll() -- lands before the Boarded; must not settle the entry
+
+    advance(5) -- Boarded fires and must be accepted, not blocked
+    deliver(my, "Helo 1")
+    advance(1) -- the delivery transition credits directly
+
+    check(sorted_rescued() == "uuid-inflight",
+        "an accepted pickup polled before its Boarded still completes the "
+        .. "rescue")
+end
+
 -- C3-refused-pickup-credit: a full cabin refuses the second pickup. The
 -- refused survivor stays alive on the ground, is never credited for the other
 -- pilot's delivery, and remains available for a later genuine pickup once the
@@ -837,6 +872,7 @@ local function test_full_cabin_refusal_is_not_a_rescue_and_keeps_survivor_availa
     pickup(my, "Helo 1", "Group FA") -- accepted
     advance(5) -- Boarded FA accepted
     pickup(my, "Helo 1", "Group FB") -- capacity 1: refused, survivor stays
+    scheduled_poll() -- FB is still alive: the poll just refreshes its position
 
     check(units_by_name["Survivor FB"] ~= nil,
         "a refused pickup leaves the survivor alive in the world")
@@ -910,6 +946,7 @@ local function main()
     test_all_hover_mission_still_registers_lifetimes()
     test_death_during_wait_then_takeoff_is_not_a_rescue()
     test_poll_death_is_not_a_rescue_but_embark_still_is()
+    test_poll_before_boarded_does_not_settle_accepted_pickup()
     print("opscsar_rescue_evidence_test: " .. passed .. " checks passed")
 end
 

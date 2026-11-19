@@ -206,6 +206,7 @@ local function opscsar_main()
                 local entry = tracked_by_group(wounded_group_name)
                 if entry ~= nil and not entry.lost_in_transit then
                     entry.lost_in_transit = true
+                    entry.pickup_accepted = false
                     dirty_state = true
                     opscsar_log(
                         "Pilot " .. tostring(entry.id)
@@ -224,6 +225,7 @@ local function opscsar_main()
                 local entry = tracked_by_id[uuid]
                 if entry ~= nil then
                     entry.lost_in_transit = true
+                    entry.pickup_accepted = false
                 end
                 opscsar_log(
                     "Pilot " .. tostring(uuid) .. " was aboard " .. tostring(name)
@@ -408,6 +410,10 @@ local function opscsar_main()
                             pending_pickup_ids[heli_name] or {}
                         pending_pickup_ids[heli_name][wounded_group_name] =
                             dcs_unit_id(heli_name)
+                        -- The accepted pickup owns the survivor's outcome until
+                        -- Boarded/delivery settle it; the disappearance poll
+                        -- must not settle them first.
+                        entry.pickup_accepted = true
                     else
                         opscsar_log(
                             "Pickup of pilot " .. entry.id .. " by "
@@ -488,6 +494,7 @@ local function opscsar_main()
                                     tracked_by_group(wounded_group_name)
                                 if entry ~= nil and not entry.done then
                                     entry.done = true
+                                    entry.pickup_accepted = false
                                     credited[#credited + 1] = entry.id
                                 end
                             else
@@ -1154,6 +1161,15 @@ local function opscsar_main()
                         -- and everything above wants them still in the world.
                         service_hover(entry)
                     end
+                elseif entry.pickup_accepted then
+                    -- The survivor may disappear before their first poll, or
+                    -- after a poll has seen them. Either way, this is an accepted
+                    -- pickup whose outcome belongs to Boarded/delivery.
+                    opscsar_log(
+                        "Pilot " .. entry.id
+                        .. " is gone with an accepted pickup in flight; "
+                        .. "leaving the outcome to Boarded/delivery."
+                    )
                 elseif entry.last_x then
                     -- Gone from the map. That is the moment a rescue registers, in
                     -- both modes: DCS deletes the survivor as it loads them and
@@ -1270,6 +1286,11 @@ local function opscsar_main()
                         -- True while our own hoist is destroying them, so the
                         -- scripted removal is not mistaken for a death.
                         extracting = false,
+                        -- Set when a wrapped _PickupUnit actually accepted the
+                        -- pickup (membership recorded): the survivor vanishing
+                        -- from the map is then that pickup, not a disappearance,
+                        -- and Boarded/delivery own the outcome until they run.
+                        pickup_accepted = false,
                     }
                     table.insert(tracked, entry)
                     tracked_by_id[dp.id] = entry
