@@ -19,6 +19,8 @@ from game.theater import (
     NavalControlPoint,
     Player,
 )
+from game.ground_forces.ai_ground_planner import reserve_armor_for
+from game.squadrons.downedpilot import DownedPilot
 from game.theater.theatergroundobject import (
     BuildingGroundObject,
     IadsGroundObject,
@@ -171,6 +173,23 @@ class ObjectiveFinder:
                 if projected_counts.get(ground_object.id, 0) > 0:
                     candidates.append(ground_object)
         yield from self._targets_by_range(candidates)
+
+    def downed_pilots(self) -> Iterator[DownedPilot]:
+        """Iterates over friendly downed pilots awaiting CSAR.
+
+        Ordered by proximity to friendly control points so the closest-to-base
+        pilots (the ones a rescue can most plausibly reach) are planned first.
+        """
+        settings = self.game.settings
+        csar_on = (
+            settings.csar_enabled
+            if self.is_player.is_blue
+            else settings.csar_enabled_red
+        )
+        if not csar_on:
+            return
+        coalition = self.game.coalition_for(self.is_player)
+        yield from self._targets_by_range(list(coalition.downed_pilots))
 
     def front_lines(self) -> Iterator[FrontLine]:
         """Iterates over all active front lines in the theater."""

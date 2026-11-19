@@ -54,3 +54,5 @@ class FlightWaypointType(IntEnum):
     INGRESS_ARMED_RECON = 34
     RECOVERY_TANKER = 35  # Tanker recovery point
     SEAD_LOITER = 36  # AI plain-SEAD standoff loiter anchor (carries a bounded orbit)
+    INGRESS_CSAR = 37  # Ingress to a CSAR pickup
+    CSAR_PICKUP = 38  # Downed-pilot pickup point for CSAR
