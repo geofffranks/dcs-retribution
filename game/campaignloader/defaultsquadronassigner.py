@@ -89,6 +89,10 @@ class DefaultSquadronAssigner:
                     squadron_config.auto_assignable
                 )
                 warn_if_primary_not_auto_assignable(squadron, squadron_config.primary)
+                # Campaign configs predate CSAR and never list it, so opt capable
+                # squadrons in by default. The player can still turn it off in the
+                # Air Wing configuration dialog.
+                squadron.enable_csar_if_capable()
                 self.air_wing.add_squadron(squadron)
 
     def find_squadron_for(

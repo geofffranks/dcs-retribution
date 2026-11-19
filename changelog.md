@@ -2,6 +2,11 @@
 
 ## Features/Improvements
 * **[Mission Generator]** Motorpool target missions now match their mission-type counterparts: STRIKE keeps one player target waypoint per parked vehicle with one AI bombing task per vehicle at ingress; BAI gets a single player target-area waypoint with one AI engage task per unit-type group at ingress; armed recon gets a single player target waypoint with a garage-centered engagement zone sized to a full 5x5 parked grid plus 20 m, independent of the configured engagement range.
+* **[Campaign]** Search & Rescue is now campaign-persistent: downed pilots stay on the map across turns, can be rescued by player or AI CSAR flights, and otherwise expire to MIA or become POWs (freeing their camp returns them). Survivors appear on the map and in the debrief, old saves opt existing squadrons in automatically, and rescue/recovery state survives save/reload.
+* **[Plugins]** Lua plugin settings can now expose drop-down choices in the UI, not just on/off toggles.
+* **[Plugins]** Airboss now supports multiple carriers per mission (relay/rescue helo, tanker and AWACS are wired to the right carrier), and each carrier's SRS transmissions follow its rescue helo instead of freezing at spawn.
+* **[UI]** Revised the mission start screen instructions.
+
 * **[Mission Generator]** Per-squadron QRA interceptor reserve: OPFOR (and opt-in OWNFOR) squadrons scramble in-air interceptors via the Moose AI_A2A_DISPATCHER against incoming air-to-ground raids detected by the IADS/EWR network. Scramble/engage radius, spawn altitude, grouping, and radio callouts are campaign-doctrine settings.
 * **[Mission Generator]** Keep carriers and LHAs clear of the shore during movement and mission generation, with configurable standoff warnings.
 * **[UX]** Add per-tanker orbit-speed controls with Auto and bounded manual KIAS modes.
@@ -10,7 +15,14 @@
 * **[Mission Generator]** F-14BU Tomcat loads up to 8 preplanned strike targets into the DTC as ST1–ST8, with matching kneeboard labels.
 * **[Ground Forces]** Enable OPFOR ground-unit transfers and buy/sell management behind the OPFOR cheat setting.
 * **[Kneeboard]** Add route maps and nearby VOR/NDB directories to player helicopter kneeboards.
+* **[Modding]** Added support for the F-15EX V3 mod (v3.0): F-15EX, F-15EX (CFTs) and F-15IA, with air-to-air loadouts, behind a New Game mods checkbox.
 * **[Modding]** Added support for the CurrentHill Iran Military Assets pack: the Shahed-136 launcher, two IRGCN fast-attack craft, and a new `[CH] Iran 2020` faction, behind a New Game mods checkbox. (#886)
+* **[Mission Generator]** Fixed-wing troop transports can now fly Air Assault missions by CTLD paradrop: any troop-capable transport (C-47, C-130, An-26B, Il-76MD, C-17A, the official C-130J-30 module, the Anubis Hercules mod) plans the mission with troops preloaded and a run-in over the target zone. A player "Unload / Extract Troops" while airborne jumps the stick (troops land after a real descent and assault the zone); AI transports release automatically over their target zone. Grounded unloads and all helicopter behavior are unchanged, and troop preloading now retries until delayed (late-activated) transports actually spawn.
+* **[Units]** Five stock transports gain a troop cabin and an Air Assault priority, so AI paradrop assaults no longer need the Hercules mod or the C-130J-30 module: the C-47, C-130, An-26B, Il-76MD and C-17A. This gives the red factions fixed-wing airborne assault for the first time — 22 of them field the Il-76MD, the VDV's own jump platform — and gives the WWII factions, which have no assault helicopters at all, the aircraft that flew the mission historically. Priorities are tiered so tactical transports outrank strategic airlifters, and the C-130J-30 module and Hercules mod still win the tasking wherever they are available.
+* **[Mission Generator]** A fixed-wing air assault now flies single-ship. One transport paradrops the whole stick, so a second only doubled the troops delivered. Helicopters still fly multi-ship, since their lift is per airframe.
+* **[Mission Generator]** Air assault objectives are capped at 100 NM from the nearest friendly control point. Helicopters were always bounded by their own legs, but a long-ranged transport would otherwise volunteer for objectives on the far side of the theatre — one turn fragged C-130s 269 NM against a base sitting 177 NM behind the nearest friendly airfield.
+* **[Mission Generator]** Fixed a transport that had already paradropped its troops re-loading every 2 seconds while parked in a pickup zone, announcing "loaded troops into ..." to its whole coalition for the rest of the mission. A paradrop transport now loads once, at preload.
+* **[Mission Generator]** The AI paradrop release now logs why it is holding — not spawned, on the ground, no troops aboard, zone not found, or inbound with the live distance to the release ring — so a transport that overflies its zone without dropping can be diagnosed from the log instead of guessed at.
 * **[Kneeboard]** Use a light-grey daytime kneeboard background instead of near-white, to avoid glare under HDR / Auto-HDR while staying readable in daylight.
 * **[UX]** Hovering a friendly flight's route line on the map highlights it in yellow, and clicking it selects that flight's package (and the flight) in the ATO sidebar.
 * **[UX]** Press Delete with a package selected in the Packages list to cancel it, making it quick to clear several packages in a row.
@@ -26,6 +38,7 @@
 * **[UX]** Show an "End of Mission Detected, processing Mission Data" busy dialog while turn results are processed, so the wait is not mistaken for a missed detection
 * **[Map]** Hovering a SAM threat or detection ring highlights its emitter — and hovering an emitter highlights its ring — making it easy to tell which site a ring belongs to. Can be disabled from the map's layer control.
 * **[Mission Generator]** New campaign setting "Default laser code for Player flights" controls whether newly-created player flights are assigned a unique allocated TGP/weapon laser code (the new default, matching existing behavior) or stay on 1688. When a code is allocated it is applied to both the TGP/kneeboard code and the weapon code by default, so LGBs home on the player's own code without extra clicks; both remain independently overridable in the payload tab.
+* **[Engine]** Support for the stock vehicles added in DCS 2.9.29 and 2.9.31, including the built-in CurrentHill ZTQ-15, BMD-2, PGZ-09, BMP-3 ERA, M1296 Dragoon and ZIL-131. No mod needed.
 * **[Engine]** Support for DCS 2.9.28.26283 including F-100D, F-14A (Export), and F-14BU.
 * **[Options]** Add new option to fast forward until player is at the IP.
 * **[Modding]** Update to CJS Super Hornet Mod to v2.4.5.260501.RC1

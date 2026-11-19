@@ -1,0 +1,1344 @@
+-- CSAR integration for DCS Retribution.
+--
+-- Retribution places each downed pilot in the mission as a real ground group
+-- carrying DCS's native `EmbarkToTransport` task, and gives every CSAR flight's
+-- pickup waypoint a matching `Embarking` task (see csargenerator.py and
+-- csarpickup.py). That combination performs the AI rescue on its own: the
+-- helicopter lands, the pilot walks over, DCS loads them and deletes the group.
+-- MOOSE Ops.CSAR cannot do this at all for AI helicopters -- its boarding loop
+-- (CSAR:_CheckWoundedGroupStatus, driven by the csarUnits list built in
+-- CSAR:_AddMedevacMenuItem) only ever considers units where _unit:IsPlayer() is
+-- true.
+--
+-- This script therefore does three things:
+--
+--  1. Hands those same pre-placed groups to Ops.CSAR, so a player flying any
+--     CSAR-capable helicopter can rescue any downed pilot -- including ones the
+--     auto-planner assigned to an AI flight -- with beacons, the F10 menu and
+--     MOOSE's own boarding.
+--
+--  2. Watches for a pilot group disappearing next to a rescue helicopter, which
+--     is how a completed native embark presents itself, and reports the rescue
+--     back to Retribution via the global `csar_rescued` table that
+--     dcs_retribution.lua writes into state.json.
+--
+--  3. Under hover extraction there is no native mechanic at all -- DCS has no
+--     hoist -- so the whole pickup is run from here. The rescue flight's pickup
+--     waypoint carries a script call into OpsCSAR_BeginHover (see csarpickup.py);
+--     that pushes a real hover onto the helicopter, and once it has held it long
+--     enough the survivor is deleted, the rescue reported and the flight released
+--     to fly home, exactly as if they had been winched aboard.
+--
+-- Assumes MOOSE (Moose.lua) and dcs_retribution.lua have already been loaded.
+
+-- A helicopter within this range of where the pilot was counts as the one that
+-- picked them up. Matches the embark zone radius used on the pilot's task.
+local PICKUP_RADIUS = 600
+-- A helo above this AGL is transiting, not picking anyone up.
+local PICKUP_MAX_AGL = 150
+local CHECK_INTERVAL = 5
+-- How long after a rescue helicopter was last seen in the embark zone a vanishing
+-- pilot still counts as having boarded it. Generous, because the only other way
+-- for a tracked survivor to disappear is being killed, and the post-mission
+-- fallback in Retribution re-checks the outcome anyway.
+local RESCUE_ATTRIBUTION_WINDOW = 120
+-- How long a rescue helicopter can be in the embark zone with the survivor still
+-- reporting as present before that is worth complaining about. Comfortably longer
+-- than the walk to the helicopter and the Embarking task's own hold.
+local STILL_HERE_WARN_AFTER = 420
+
+-- The AI embark, watched from the helicopter's side (landing mode only).
+--
+-- Once troops are loaded they stop being a unit anyone can query, so every test
+-- that looks at the survivor is racing their removal. The helicopter, though,
+-- announces both ends of the pickup: DCS fires S_EVENT_LAND when it sets down on
+-- the unprepared LZ and S_EVENT_TAKEOFF when it lifts again, both with a nil
+-- `place` (an airfield or FARP fills that in, which is how an RTB landing is told
+-- apart). A rescue flight that put down inside a survivor's embark zone, stayed
+-- long enough for them to walk over, and then left, has done the pickup.
+--
+-- Below this much time on the ground it cannot have loaded anybody -- the walk
+-- from the survivor to the touchdown point is LANDING_ZONE_OFFSET on foot.
+local EMBARK_MIN_GROUND_TIME = 20
+
+-- Positive detection that the survivor has boarded.
+--
+-- DCS fires no embark event -- there is nothing in the event enum for troop
+-- transport, and a full AI pickup (touchdown, load, RTB, shutdown) produces no
+-- event attributable to the survivor at all. But it does keep reporting a
+-- position for troops it has loaded, and that position is the transport's.
+--
+-- A survivor never goes anywhere under their own power except the run to a
+-- helicopter that has landed for them, and that run stays inside the embark zone
+-- by construction (LANDING_ZONE_OFFSET is half its radius). So a reported
+-- position outside that zone is not the pilot moving -- it is the pilot being
+-- flown away, which is the pickup. No altitude, no terrain, nothing to be fooled
+-- by. The zone radius itself is the threshold; see embark_zone_radius.
+
+-- Hover extraction (the csar_hover_extraction setting). DCS's embark tasks only
+-- fire once the transport is on the ground with weight off wheels, so when the
+-- player would rather not have the AI hunting for a landable patch of terrain we
+-- fake the recovery instead: the flight is held in a hover over the survivor and
+-- the pickup is simulated when the hold is done.
+--
+-- Defaults only; the real values are injected from csarpickup.py.
+local HOVER_DURATION_SECONDS = 30
+local HOVER_ALTITUDE = 30
+
+-- Signal smoke for AI rescues. The survivor pops smoke in their own coalition's
+-- colour once an AI rescue helicopter is inside their embark zone. Players get
+-- Ops.CSAR's "Request Smoke" F10 menu item instead, so they choose when to expose
+-- the survivor's position. DCS smoke burns for about five minutes, so re-pop on
+-- that cadence while the helicopter is still around.
+local SMOKE_MAX_AGL = 600
+local SMOKE_REPOP_SECONDS = 300
+
+local function opscsar_log(msg)
+    env.info("[OpsCSAR] " .. tostring(msg))
+end
+
+local function opscsar_warn(msg)
+    env.warning("[OpsCSAR] " .. tostring(msg))
+end
+
+local function opscsar_main()
+    if not dcsRetribution or type(dcsRetribution.CSAR) ~= "table" then
+        opscsar_log("No CSAR data injected; nothing to do.")
+        return
+    end
+
+    csar_rescued = csar_rescued or {}
+    local cfg = dcsRetribution.CSAR
+    -- The mission-wide default. The pickup style is decided per pilot though (see
+    -- entry.hover), because a survivor in the water has to be hoisted whatever
+    -- this says.
+    local hover_extraction = cfg.hoverExtraction == "true"
+    local embark_zone_radius = tonumber(cfg.embarkZoneRadius) or PICKUP_RADIUS
+    local hover_duration = tonumber(cfg.hoverDurationSeconds) or HOVER_DURATION_SECONDS
+    local hover_altitude = tonumber(cfg.hoverAltitudeMeters) or HOVER_ALTITUDE
+    -- Survivors this close to the one being collected come out on the same lift.
+    local cluster_radius = tonumber(cfg.clusterRadius) or 0
+
+    opscsar_log(
+        "=== CSAR starting (default AI pickup: "
+        .. (hover_extraction and "scripted hover extraction" or "DCS embark on landing")
+        .. ") ==="
+    )
+
+    -- Moose.lua always defines the AICSAR *class*, so testing for the global
+    -- alone warns on every single mission. An instance assigned over the global
+    -- fills in lid/alias, which the class table leaves empty.
+    if AICSAR ~= nil and AICSAR.lid ~= nil and AICSAR.lid ~= "" then
+        opscsar_warn(
+            "AICSAR appears to be loaded as well. Running Ops.CSAR and AICSAR "
+            .. "together is not recommended."
+        )
+        trigger.action.outText(
+            "WARNING: Both Ops.CSAR and AICSAR are enabled. Disable one of them.",
+            20
+        )
+    end
+
+    -- ------------------------------------------------------------------
+    -- Ops.CSAR, for player-flown rescues.
+    -- ------------------------------------------------------------------
+    local blue_csar, red_csar = nil, nil
+    local onboard = {} -- helo unit name -> list of pilot UUIDs aboard
+    -- helo unit name -> { wounded group name -> DCS runtime unit id }: the
+    -- actual aircraft identity that made each pickup, recorded by the
+    -- _PickupUnit wrapper at the real pickup moment (the delayed Boarded comes
+    -- 5s later, when a same-name respawn can already have taken the name).
+    local pending_pickup_ids = {}
+
+    -- The DCS runtime id of the live unit under `name`, or nil. Ids differ
+    -- between a destroyed helicopter and its same-name respawn, which is the
+    -- identity a name lookup cannot provide.
+    local function dcs_unit_id(name)
+        local ok, id = pcall(function()
+            local unit = Unit.getByName(name)
+            if unit ~= nil and unit:isExist() then
+                return unit:getID()
+            end
+            return nil
+        end)
+        return ok and id or nil
+    end
+
+    -- The name of a MOOSE UNIT object, or nil.
+    local function unit_name_of(moose_unit)
+        local ok, name = pcall(function()
+            return moose_unit:GetName()
+        end)
+        return ok and name or nil
+    end
+
+    -- Declared up here so the Ops.CSAR callbacks below can resolve a survivor
+    -- back to their Retribution id. Populated further down.
+    local tracked = {}
+    local tracked_by_id = {}
+    local tracked_by_unit = {}
+
+    local function tracked_by_group(group_name)
+        for _, entry in pairs(tracked) do
+            if entry.group_name == group_name then
+                return entry
+            end
+        end
+        return nil
+    end
+
+    -- Passengers recorded aboard a helicopter live only as long as that
+    -- A helicopter's passengers — recorded aboard, and pickups whose delayed
+    -- Boarded has not run yet — live only as long as that helicopter does.
+    -- Reconciliation runs on its loss (UNIT_LOST/CRASH/DEAD) and on a same-name
+    -- BIRTH standing in for a missed loss event: the boarding records and the
+    -- pickup identities recorded at the real pickup moment are marked and
+    -- dropped, so neither the lost pilots nor a delayed Boarded callback from
+    -- the previous aircraft lifetime can be credited to the replacement.
+    -- Delivered batches are deliberately untouched: those passengers were
+    -- handed over at the delivery transition and their Rescued callback is
+    -- still in flight.
+    local function reconcile_heli_loss(name)
+        local pend = pending_pickup_ids[name]
+        if pend ~= nil then
+            pending_pickup_ids[name] = nil
+            for wounded_group_name, _recorded_id in pairs(pend) do
+                local entry = tracked_by_group(wounded_group_name)
+                if entry ~= nil and not entry.lost_in_transit then
+                    entry.lost_in_transit = true
+                    entry.pickup_accepted = false
+                    dirty_state = true
+                    opscsar_log(
+                        "Pilot " .. tostring(entry.id)
+                        .. " was being picked up by " .. tostring(name)
+                        .. " when it was lost; rescue not credited."
+                    )
+                end
+            end
+        end
+
+        local aboard = onboard[name]
+        if aboard ~= nil then
+            onboard[name] = nil
+            dirty_state = true
+            for _, uuid in pairs(aboard) do
+                local entry = tracked_by_id[uuid]
+                if entry ~= nil then
+                    entry.lost_in_transit = true
+                    entry.pickup_accepted = false
+                end
+                opscsar_log(
+                    "Pilot " .. tostring(uuid) .. " was aboard " .. tostring(name)
+                    .. " when it was lost; rescue not credited."
+                )
+            end
+        end
+    end
+
+    local function make_csar(side_name, side_const, template)
+        if CSAR == nil then
+            opscsar_warn("MOOSE Ops.CSAR not found; player CSAR unavailable.")
+            return nil
+        end
+        if template == nil or template == "" then
+            opscsar_warn("No pilot template for " .. side_name .. "; skipping side.")
+            return nil
+        end
+        if GROUP:FindByName(template) == nil then
+            opscsar_warn(
+                "Pilot template '" .. template .. "' not found for " .. side_name
+            )
+            return nil
+        end
+        local my = CSAR:New(side_const, template, "CSAR")
+        my.enableForAI = cfg.rescueAI == "true"
+        -- Survivors wait for the cabin door before boarding or getting out. Only
+        -- affects crewed rescues; the AI paths don't go through Ops.CSAR at all.
+        my.pilotmustopendoors = cfg.requireOpenDoors == "true"
+        -- How low and how close a player must hover to winch a survivor up.
+        my.rescuehoverheight = tonumber(cfg.playerHoverHeight) or my.rescuehoverheight
+        my.rescuehoverdistance =
+            tonumber(cfg.playerHoverDistance) or my.rescuehoverdistance
+        -- Consider *every* friendly helicopter, not just ones named after MOOSE's
+        -- demo templates. Ops.CSAR defaults to useprefix=true with
+        -- csarPrefix={"helicargo","MEDEVAC"} and builds allheligroupset from that,
+        -- which in turn is the only source of csarUnits -- the list that drives
+        -- both the F10 menu and MOOSE's boarding. Retribution names its flights
+        -- after the mission, so with the default no player helicopter is ever a
+        -- rescue helicopter: no menu, no pickup, silently.
+        my.useprefix = false
+        -- MOOSE defaults these to USA/Russia and applies them with InitCountry()
+        -- when spawning a pilot. DCS derives coalition membership from country, so
+        -- they must match the faction actually flying for this side.
+        local country_override = tonumber(
+            side_const == coalition.side.RED and cfg.redCountry or cfg.blueCountry
+        )
+        if country_override then
+            if side_const == coalition.side.RED then
+                my.countryred = country_override
+            else
+                my.countryblue = country_override
+            end
+        end
+        my:__Start(1)
+
+        function my:OnAfterBoarded(From, Event, To, Heliname, Woundedgroupname)
+            -- Resolve against our own list rather than self.downedPilots, which
+            -- is a race: _PickupUnit destroys the survivor's group and Boarded is
+            -- raised 5s later, while onbeforeStatus -> _CheckDownedPilotTable
+            -- drops any entry whose group is gone. Usually the id is still there
+            -- when we get here; if a Status cycle lands in that 5s window it is
+            -- not, and the rescue goes unrecorded. Our list has no such window.
+            local entry = tracked_by_group(Woundedgroupname)
+            if entry == nil or not Heliname then
+                return
+            end
+            -- A pilot already settled — delivered, or accounted for any other
+            -- way — cannot board again: a Boarded arriving afterwards is a
+            -- delayed callback whose delivery has already happened (e.g. a
+            -- pickup handed over by _RescuePilots before its Boarded ran).
+            -- Idempotent settle: crediting twice would double-report.
+            if entry.done then
+                opscsar_log(
+                    "Ignoring boarding of pilot " .. entry.id .. " by "
+                    .. tostring(Heliname) .. ": already settled."
+                )
+                return
+            end
+            -- A pilot who went down with a lost helicopter cannot board again:
+            -- a Boarded raised for them afterwards is a delayed callback from
+            -- the previous aircraft lifetime, not a fresh pickup.
+            if entry.lost_in_transit then
+                opscsar_log(
+                    "Ignoring boarding of pilot " .. entry.id .. " by "
+                    .. tostring(Heliname) .. ": that helicopter was lost with "
+                    .. "them aboard."
+                )
+                return
+            end
+            -- MOOSE raises Boarded exactly 5s after its _PickupUnit, and after
+            -- a same-name respawn nothing name-based can tell the aircraft that
+            -- made the pickup from its replacement (MOOSE's onbeforeBoarded
+            -- rejects nothing and its inTransitGroups survives because
+            -- _GetSARHeli answers for the respawn). The wrapper on _PickupUnit
+            -- recorded the picking aircraft's DCS runtime id at the real
+            -- pickup; a mismatch here is the previous lifetime's callback.
+            local pend = pending_pickup_ids[Heliname]
+            local recorded_id = pend ~= nil and pend[Woundedgroupname] or nil
+            if recorded_id ~= nil then
+                local current_id = dcs_unit_id(Heliname)
+                if current_id == nil or current_id ~= recorded_id then
+                    pend[Woundedgroupname] = nil
+                    opscsar_log(
+                        "Ignoring boarding of pilot " .. entry.id .. " by "
+                        .. tostring(Heliname)
+                        .. ": reported by a different aircraft than the one "
+                        .. "that made the pickup."
+                    )
+                    return
+                end
+                pend[Woundedgroupname] = nil
+            end
+            -- The helicopter itself must still exist; a boarding reported for a
+            -- unit no longer in the world can never be delivered.
+            local heli = Unit.getByName(Heliname)
+            if heli == nil or not heli:isExist() then
+                opscsar_log(
+                    "Ignoring boarding of pilot " .. entry.id .. " by "
+                    .. tostring(Heliname) .. ": the helicopter is gone."
+                )
+                return
+            end
+            -- Theirs to report now. Ops.CSAR credits the rescue on delivery, not
+            -- on pickup, which is the behaviour we want for a crewed rescue.
+            entry.moose_boarded = true
+            entry.done = true
+            onboard[Heliname] = onboard[Heliname] or {}
+            table.insert(onboard[Heliname], entry.id)
+            opscsar_log(
+                "Pilot " .. entry.id .. " boarded " .. Heliname
+                .. "; rescue will be reported on delivery."
+            )
+        end
+
+        function my:OnAfterRescued(From, Event, To, HeliUnit, HeliName, PilotsSaved)
+            -- Rescued arrives ~1s after _RescuePilots (FSM:_delayed_transition
+            -- abs()'s the -1) and is instance-wide deduplicated, so it carries
+            -- no reliable per-delivery identity and accounting does not depend
+            -- on it: the _RescuePilots wrapper credits at the transition
+            -- itself. This handler only sweeps up anything that somehow bypassed
+            -- that wrapper, so an unwrapped delivery still reports.
+            local saved = onboard[HeliName]
+            if saved then
+                for _, uuid in pairs(saved) do
+                    table.insert(csar_rescued, uuid)
+                    opscsar_log("Pilot " .. uuid .. " rescued by " .. tostring(HeliName))
+                end
+                onboard[HeliName] = nil
+                dirty_state = true
+            end
+        end
+
+        -- Wrapper: _PickupUnit is the one place every MOOSE pickup passes
+        -- (all three call sites), and it runs BEFORE the 5s-delayed Boarded,
+        -- while the picking aircraft is in hand. But the original can refuse
+        -- the pickup without boarding anyone — the cabin-capacity guard
+        -- (Moose.lua 79073-79: _PilotsOnboard + 1 > AircraftType[type] or
+        -- max_units) returns before creating membership, destroying the group
+        -- or scheduling Boarded, and the landed call sites do not pre-check —
+        -- so identity is recorded only when the original actually accepted:
+        -- inTransitGroups[heliName][woundedGroupName] exists afterwards. A
+        -- refused survivor stays alive on the ground, unrecorded, available
+        -- for a later genuine pickup. Original behavior untouched.
+        local original_pickup = my._PickupUnit
+        if type(original_pickup) == "function" then
+            my._PickupUnit = function(inst, heli_unit, pilot_name, wounded_group, wounded_group_name, ...)
+                local result = original_pickup(
+                    inst, heli_unit, pilot_name, wounded_group,
+                    wounded_group_name, ...
+                )
+                local heli_name = unit_name_of(heli_unit)
+                local entry = wounded_group_name ~= nil
+                    and tracked_by_group(wounded_group_name) or nil
+                if heli_name ~= nil and entry ~= nil then
+                    local accepted = type(inst.inTransitGroups) == "table"
+                        and inst.inTransitGroups[heli_name] ~= nil
+                        and inst.inTransitGroups[heli_name][wounded_group_name]
+                            ~= nil
+                    if accepted then
+                        pending_pickup_ids[heli_name] =
+                            pending_pickup_ids[heli_name] or {}
+                        pending_pickup_ids[heli_name][wounded_group_name] =
+                            dcs_unit_id(heli_name)
+                        -- The accepted pickup owns the survivor's outcome until
+                        -- Boarded/delivery settle it; the disappearance poll
+                        -- must not settle them first.
+                        entry.pickup_accepted = true
+                    else
+                        opscsar_log(
+                            "Pickup of pilot " .. entry.id .. " by "
+                            .. tostring(heli_name)
+                            .. " was not accepted; pilot stays awaiting pickup."
+                        )
+                    end
+                end
+                return result
+            end
+        end
+
+        -- Wrapper: _RescuePilots is the one delivery point (called from
+        -- _ScheduledSARFlight's "Rescued!" branch, only when
+        -- inTransitGroups[heliName] actually holds members). The delivery
+        -- transition itself — MOOSE hands over every member, whether its
+        -- Boarded already ran or it was still awaiting the 5s-delayed event —
+        -- is the authoritative moment to credit, so it is done here, right
+        -- after the original method succeeded: neither the Rescued callback
+        -- (delayed 1s and instance-wide deduplicated by the FSM, so one
+        -- helicopter's delivery can cancel another's callback) nor a
+        -- helicopter lost inside that second can strand or erase it.
+        --
+        -- Credit is the intersection with the ACTUAL delivered membership
+        -- (captured before the original clears it, keyed by wounded group
+        -- name): a pickup the original refused — full cabin, survivor still
+        -- on the ground — was never recorded (see the _PickupUnit wrapper)
+        -- and would not be in the membership anyway, so no tracked pilot can
+        -- be credited for a handover that never happened. Anything tracked
+        -- but not in the delivered membership (a genuinely still-pending
+        -- pickup) is preserved untouched for a later real delivery.
+        local original_rescue = my._RescuePilots
+        if type(original_rescue) == "function" then
+            my._RescuePilots = function(inst, heli_unit, ...)
+                local heli_name = heli_unit ~= nil and unit_name_of(heli_unit)
+                    or nil
+                -- Actual membership check and capture, before the original
+                -- clears it.
+                local membership = heli_name ~= nil
+                    and type(inst.inTransitGroups) == "table"
+                    and inst.inTransitGroups[heli_name] or nil
+                local result = original_rescue(inst, heli_unit, ...)
+                if membership ~= nil then
+                    local aboard = onboard[heli_name]
+                    local pend = pending_pickup_ids[heli_name]
+                    onboard[heli_name] = nil
+                    pending_pickup_ids[heli_name] = nil
+                    local credited = {}
+                    -- Acknowledged boardings: delivered members by
+                    -- construction, intersected defensively anyway.
+                    if aboard ~= nil then
+                        for _, uuid in ipairs(aboard) do
+                            local entry = tracked_by_id[uuid]
+                            if entry == nil
+                                or membership[entry.group_name] ~= nil then
+                                credited[#credited + 1] = uuid
+                            else
+                                -- Boarded but not in the delivered membership:
+                                -- keep them aboard rather than guess.
+                                onboard[heli_name] = onboard[heli_name] or {}
+                                table.insert(onboard[heli_name], uuid)
+                                opscsar_log(
+                                    "Pilot " .. uuid
+                                    .. " was aboard but not among the delivered "
+                                    .. "members; still recorded aboard "
+                                    .. tostring(heli_name) .. "."
+                                )
+                            end
+                        end
+                    end
+                    -- Pending pickups: credited only when actually delivered;
+                    -- others stay pending for a later genuine pickup.
+                    local still_pending = nil
+                    if pend ~= nil then
+                        for wounded_group_name, _recorded_id in pairs(pend) do
+                            if membership[wounded_group_name] ~= nil then
+                                local entry =
+                                    tracked_by_group(wounded_group_name)
+                                if entry ~= nil and not entry.done then
+                                    entry.done = true
+                                    entry.pickup_accepted = false
+                                    credited[#credited + 1] = entry.id
+                                end
+                            else
+                                still_pending = still_pending or {}
+                                still_pending[wounded_group_name] =
+                                    pend[wounded_group_name]
+                            end
+                        end
+                        if still_pending ~= nil then
+                            pending_pickup_ids[heli_name] = still_pending
+                        end
+                    end
+                    for _, uuid in ipairs(credited) do
+                        table.insert(csar_rescued, uuid)
+                        opscsar_log(
+                            "Pilot " .. uuid .. " rescued by " .. tostring(heli_name)
+                        )
+                    end
+                    if #credited > 0 then
+                        dirty_state = true
+                    end
+                end
+                return result
+            end
+        end
+
+        opscsar_log(side_name .. " Ops.CSAR started (template=" .. template .. ")")
+        return my
+    end
+
+    if cfg.blueEnabled == "true" then
+        blue_csar = make_csar("BLUE", coalition.side.BLUE, cfg.blueTemplate)
+    end
+    if cfg.redEnabled == "true" then
+        red_csar = make_csar("RED", coalition.side.RED, cfg.redTemplate)
+    end
+
+    -- Registers an already-placed pilot group with Ops.CSAR. This is the tail of
+    -- CSAR:_AddCsar with the spawn removed, so the player experience (ADF beacon,
+    -- MAYDAY call, F10 menu, boarding) is identical to a MOOSE-spawned pilot.
+    local function register_with_ops_csar(instance, group, uuid, description, typename)
+        if instance == nil or group == nil then
+            return false
+        end
+        local ok, err = pcall(function()
+            local freq = instance:_GenerateADFFrequency() or 333000
+            local beacon_name = uuid .. "-" .. math.random(1, 10000)
+            if freq ~= 0 then
+                instance:_AddBeaconToGroup(group, freq, beacon_name)
+            end
+            instance:_AddSpecialOptions(group)
+            instance:_CreateDownedPilotTrack(
+                group,
+                group:GetName(),
+                instance.coalition,
+                uuid, -- becomes DownedPilot.originalUnit, our id back again
+                description,
+                typename,
+                freq,
+                nil,
+                false,
+                beacon_name
+            )
+            instance:_InitSARForPilot(group, group:GetName(), freq, false, nil)
+        end)
+        if not ok then
+            opscsar_warn("Could not register pilot with Ops.CSAR: " .. tostring(err))
+            return false
+        end
+        return true
+    end
+
+    -- ------------------------------------------------------------------
+    -- Rescue detection for the native (AI) embark.
+    --
+    -- DCS gives no event when troops board a transport; the pilot's group simply
+    -- ceases to exist. So remember where each pilot was and whether a rescue
+    -- helicopter was on top of them, and treat "group gone while a helo was
+    -- right there" as a pickup. Anything else (killed, or still waiting) is left
+    -- alone -- Retribution's own post-mission fallback still handles those.
+    -- ------------------------------------------------------------------
+    local function distance2d(ax, az, bx, bz)
+        local dx, dz = ax - bx, az - bz
+        return math.sqrt(dx * dx + dz * dz)
+    end
+
+    -- Whether anyone is flying this group. A Retribution flight is a single DCS
+    -- group holding the client slots *and* their AI wingmen, so the question has
+    -- to be asked of the group: testing units individually leaves the wingmen
+    -- looking like an AI rescue flight, and they are close enough to the survivor
+    -- to satisfy every proximity check we make.
+    local function group_has_player(group)
+        for _, unit in pairs(group:getUnits() or {}) do
+            if unit:isExist() and unit:getPlayerName() ~= nil then
+                return true
+            end
+        end
+        return false
+    end
+
+    -- Nearest live helicopter of `side` within `radius` of the point and no higher
+    -- than `max_agl`. `ai_only` skips player-crewed flights, which Ops.CSAR owns.
+    local function helo_near(side_const, px, pz, radius, max_agl, ai_only)
+        local groups = coalition.getGroups(side_const, Group.Category.HELICOPTER) or {}
+        for _, group in pairs(groups) do
+            if group:isExist() and not (ai_only and group_has_player(group)) then
+                for _, unit in pairs(group:getUnits() or {}) do
+                    if unit:isExist() and unit:getLife() > 0 then
+                        local point = unit:getPoint()
+                        local agl =
+                            point.y - land.getHeight({ x = point.x, y = point.z })
+                        if agl <= max_agl then
+                            local d = distance2d(px, pz, point.x, point.z)
+                            if d <= radius then
+                                return unit
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        return nil
+    end
+
+    -- AI only, deliberately. Everything this drives -- the vanish attribution and
+    -- carried_out_of_zone -- credits a rescue the moment the survivor leaves the
+    -- map, which is the right moment for an AI pickup but the *wrong* one for a
+    -- player: Ops.CSAR credits a crewed rescue on delivery to a MASH or airfield,
+    -- and MOOSE destroys the survivor at pickup, so counting the vanish would
+    -- report the rescue while the pilot is still in the back of the helicopter.
+    local function rescue_helo_near(side_const, px, pz)
+        return helo_near(side_const, px, pz, PICKUP_RADIUS, PICKUP_MAX_AGL, true)
+    end
+
+    -- The helicopter flying the survivor away, if their reported position has left
+    -- the embark zone. Attribution is the rescue helicopter last seen in the zone:
+    -- it is the one that landed for them, and nothing else could have moved them.
+    local function carried_out_of_zone(entry, point)
+        if entry.origin_x == nil or entry.helo_name == nil then
+            return nil
+        end
+        local travelled =
+            distance2d(point.x, point.z, entry.origin_x, entry.origin_z)
+        if travelled <= embark_zone_radius then
+            return nil
+        end
+        return entry.helo_name
+    end
+
+    -- Pops signal smoke at the survivor while an *AI* rescue helicopter is inside
+    -- their embark zone. Blue coalition pilots throw blue smoke, red throw red.
+    --
+    -- AI only, deliberately: a human crew already has Ops.CSAR's "Request Smoke"
+    -- F10 menu item and can call for it when they want it. Popping automatically
+    -- for players would both pre-empt that choice and give away the survivor's
+    -- position for the whole burn time whether they wanted it or not.
+    local function maybe_pop_smoke(entry, px, pz)
+        local helo = helo_near(
+            entry.side, px, pz, embark_zone_radius, SMOKE_MAX_AGL, true
+        )
+        if helo == nil then
+            return
+        end
+        local now = timer.getTime()
+        if entry.smoke_until ~= nil and now < entry.smoke_until then
+            return
+        end
+        entry.smoke_until = now + SMOKE_REPOP_SECONDS
+        local colour = entry.side == coalition.side.RED
+            and trigger.smokeColor.Red
+            or trigger.smokeColor.Blue
+        pcall(function()
+            -- Offset slightly so the plume doesn't sit inside the pilot model.
+            trigger.action.smoke({ x = px + 6, y = land.getHeight({ x = px + 6, y = pz }), z = pz }, colour)
+        end)
+        opscsar_log(
+            "Pilot " .. entry.id .. " popped smoke for " .. tostring(helo:getName())
+        )
+    end
+
+    -- Single place a rescue is reported back to Retribution.
+    local function record_rescue(entry, by, how)
+        if entry.done then
+            return
+        end
+        if entry.killed_in_world then
+            opscsar_log(
+                "Not crediting a rescue for pilot " .. entry.id
+                .. ": they are known dead, not embarked."
+            )
+            return
+        end
+        entry.done = true
+        table.insert(csar_rescued, entry.id)
+        dirty_state = true
+        opscsar_log(
+            "Pilot " .. entry.id .. " " .. how .. " " .. tostring(by or "a helicopter")
+        )
+    end
+
+    -- ------------------------------------------------------------------
+    -- Scripted hoist pickup.
+    --
+    -- The flight tells us when it is on station rather than us guessing from
+    -- proximity: its pickup waypoint runs OpsCSAR_BeginHover (csarpickup.py). We
+    -- then hold it ourselves, because the hold cannot be built into the .miz --
+    -- the DCS Orbit task takes an MSL altitude and Retribution has no terrain
+    -- elevation when it generates the mission. land.getHeight does, here.
+    --
+    -- AI only: a player over the survivor is Ops.CSAR's to handle, and lifting the
+    -- pilot out from under it would break MOOSE's own boarding. DCS doesn't run
+    -- waypoint tasks for client aircraft, so that falls out for free.
+    -- ------------------------------------------------------------------
+
+    -- The other survivors close enough to `entry` to come out on the same lift.
+    -- Rebuilt here rather than injected, so it stays right even if a cluster-mate
+    -- has already been collected or killed by the time the flight arrives.
+    local function cluster_with(entry)
+        local mates = {}
+        if cluster_radius <= 0 or entry.last_x == nil then
+            return mates
+        end
+        for _, other in pairs(tracked) do
+            if other ~= entry and not other.done and other.side == entry.side
+                and other.last_x ~= nil
+                and distance2d(
+                    entry.last_x, entry.last_z, other.last_x, other.last_z
+                ) <= cluster_radius then
+                table.insert(mates, other)
+            end
+        end
+        return mates
+    end
+
+    local function hover_controller(entry)
+        if entry.hover_group == nil then
+            return nil
+        end
+        local group = Group.getByName(entry.hover_group)
+        if group == nil or not group:isExist() then
+            return nil
+        end
+        return group:getController()
+    end
+
+    -- Gives the flight its route back, so it flies on to the arrival waypoint.
+    -- popTask is what makes this safe: unlike setTask it leaves the underlying
+    -- route mission in place, so the helicopter simply resumes it.
+    local function release_hover(entry, why)
+        if entry.hover_group == nil then
+            return
+        end
+        local name = entry.hover_group
+        local controller = hover_controller(entry)
+        entry.hover_group = nil
+        entry.hover_since = nil
+        if controller == nil then
+            return
+        end
+        local ok, err = pcall(function()
+            controller:popTask()
+        end)
+        if ok then
+            opscsar_log(name .. " released from the hover (" .. why .. ")")
+        else
+            opscsar_warn("Could not release " .. name .. ": " .. tostring(err))
+        end
+    end
+
+    local function begin_hover(entry, helo_group_name)
+        local group = Group.getByName(helo_group_name)
+        if group == nil or not group:isExist() then
+            opscsar_warn("Rescue flight '" .. helo_group_name .. "' not found.")
+            return
+        end
+        local controller = group:getController()
+        if controller == nil then
+            return
+        end
+        local px, pz, py = entry.last_x, entry.last_z, entry.last_y
+        if px == nil then
+            local pilot = Group.getByName(entry.group_name)
+            local unit = pilot and pilot:isExist() and pilot:getUnit(1) or nil
+            local point = unit and unit:getPoint() or nil
+            if point == nil then
+                opscsar_warn(
+                    "No position for pilot " .. tostring(entry.id)
+                    .. "; cannot set up the hover."
+                )
+                return
+            end
+            px, pz, py = point.x, point.z, point.y
+            entry.last_x, entry.last_z, entry.last_y = px, pz, py
+        end
+
+        -- Hold this far above whatever the survivor is lying on. Their own
+        -- reported altitude is the reference rather than land.getHeight, which
+        -- reads the sea *bottom* over water (the same DCS quirk the
+        -- switch_baro_fix setting exists for) and would sink the hover.
+        local surface = py or land.getHeight({ x = px, y = pz })
+
+        local ok, err = pcall(function()
+            controller:pushTask({
+                id = "Orbit",
+                params = {
+                    pattern = "Circle",
+                    point = { x = px, y = pz },
+                    -- A circle flown at zero speed is a stationary hover.
+                    speed = 0,
+                    -- MSL, which is the only reason this has to happen at
+                    -- runtime rather than in the .miz.
+                    altitude = surface + hover_altitude,
+                },
+            })
+        end)
+        if not ok then
+            opscsar_warn("Could not hold " .. helo_group_name .. ": " .. tostring(err))
+            return
+        end
+
+        entry.hover_group = helo_group_name
+        entry.hover_since = timer.getTime()
+        opscsar_log(
+            "AI rescue " .. helo_group_name .. " holding hover over "
+            .. tostring(entry.id) .. "; hoist in " .. hover_duration .. "s."
+        )
+    end
+
+    -- Called from the rescue flight's pickup waypoint. Global on purpose: this is
+    -- the entry point csarpickup.py writes into the mission.
+    function OpsCSAR_BeginHover(helo_group_name, uuid)
+        local entry = tracked_by_id[uuid]
+        if entry ~= nil and not entry.hover then
+            -- The waypoint only carries this call in hover mode, so the two
+            -- disagreeing means the .miz and the injected data are out of step.
+            opscsar_warn(
+                "Hover requested for " .. tostring(uuid)
+                .. ", who is set up for a landing pickup; ignoring."
+            )
+            return
+        end
+        if entry == nil then
+            opscsar_warn("Hover requested for unknown pilot " .. tostring(uuid))
+            return
+        end
+        if entry.done or entry.hover_group ~= nil then
+            return
+        end
+        local ok, err = pcall(begin_hover, entry, helo_group_name)
+        if not ok then
+            opscsar_warn("Hover setup failed: " .. tostring(err))
+        end
+    end
+
+    -- Completes the hoist once the flight has held its hover long enough: the
+    -- survivor is removed by hand (nothing in DCS loads them in this mode) and the
+    -- flight is sent on its way.
+    local function service_hover(entry)
+        if entry.hover_since == nil then
+            return
+        end
+        local held = timer.getTime() - entry.hover_since
+        if hover_controller(entry) == nil then
+            -- Flight shot down or despawned mid-hoist.
+            entry.hover_group = nil
+            entry.hover_since = nil
+            return
+        end
+        if held < hover_duration then
+            return
+        end
+
+        local by = entry.hover_group
+        -- The whole cluster comes up on this hover, not just the one the flight
+        -- was planned against.
+        local lifted = { entry }
+        for _, mate in pairs(cluster_with(entry)) do
+            table.insert(lifted, mate)
+        end
+        for _, survivor in pairs(lifted) do
+            -- Mark before the scripted destroy: if DCS fires a loss event for
+            -- the removal, that is our own hoist, not a battlefield death.
+            survivor.extracting = true
+            local group = Group.getByName(survivor.group_name)
+            if group and group:isExist() then
+                group:destroy()
+            end
+            -- Stop Ops.CSAR beaconing and calling MAYDAY for someone aboard.
+            if survivor.instance then
+                pcall(function()
+                    survivor.instance:_RemoveNameFromDownedPilots(
+                        survivor.group_name, true
+                    )
+                end)
+            end
+            record_rescue(survivor, by, "hoisted by")
+        end
+        release_hover(entry, "hoist complete")
+    end
+
+    -- The survivor, if they are still standing in the world; nil once they are not.
+    --
+    -- This asks DCS's unit registry by name rather than walking the group. Neither
+    -- the group nor the unit *handles* it hands back are a liveness test: DCS keeps
+    -- both alive while the occupants are aboard a transport, ready to be
+    -- disembarked, so a group-based check never sees the pickup even though the
+    -- pilot has visibly gone from the map. Unit.getByName is resolved against the
+    -- world every time it is called, and returns nil once the unit is gone.
+    local function survivor_in_world(entry)
+        if entry.unit_name and entry.unit_name ~= "" then
+            local unit = Unit.getByName(entry.unit_name)
+            if unit == nil or not unit:isExist() or unit:getLife() <= 0 then
+                return nil
+            end
+            return unit
+        end
+        -- No unit name injected (older save); fall back to the group.
+        local group = Group.getByName(entry.group_name)
+        if group == nil or not group:isExist() then
+            return nil
+        end
+        for _, unit in pairs(group:getUnits() or {}) do
+            if unit ~= nil and unit:isExist() and unit:getLife() > 0 then
+                return unit
+            end
+        end
+        return nil
+    end
+
+    -- ------------------------------------------------------------------
+    -- Embark detection from the helicopter's events (AI, landing mode).
+    -- ------------------------------------------------------------------
+
+    local function is_ai_helicopter(unit)
+        local ok, result = pcall(function()
+            if unit == nil or not unit:isExist() then
+                return false
+            end
+            local group = unit:getGroup()
+            if group == nil or group:getCategory() ~= Group.Category.HELICOPTER then
+                return false
+            end
+            -- Crewed flights are Ops.CSAR's to handle; it reports their pickups
+            -- itself, on delivery. Asked of the whole group so an AI wingman in a
+            -- player's flight doesn't land us in the AI path.
+            return not group_has_player(group)
+        end)
+        return ok and result == true
+    end
+
+    -- The survivor whose embark zone this point is inside, if any. Hover pickups
+    -- are excluded: nothing lands for them, so a helicopter setting down nearby is
+    -- somebody else's business.
+    local function survivor_awaiting_pickup_at(point, side_const)
+        for _, entry in pairs(tracked) do
+            local px = entry.origin_x or entry.spawn_x
+            local pz = entry.origin_z or entry.spawn_z
+            if not entry.done and not entry.hover and not entry.killed_in_world
+                and entry.side == side_const and px ~= nil then
+                if distance2d(point.x, point.z, px, pz) <= embark_zone_radius then
+                    return entry
+                end
+            end
+        end
+        return nil
+    end
+
+    local function on_lz_landing(unit)
+        local point = unit:getPoint()
+        local entry = survivor_awaiting_pickup_at(point, unit:getCoalition())
+        if entry == nil then
+            return
+        end
+        entry.embark_helo = unit:getName()
+        entry.embark_landed_at = timer.getTime()
+        opscsar_log(
+            entry.embark_helo .. " has landed to collect " .. tostring(entry.id)
+        )
+    end
+
+    local function on_lz_takeoff(unit)
+        local name = unit:getName()
+        for _, entry in pairs(tracked) do
+            if not entry.done and entry.embark_helo == name then
+                entry.embark_helo = nil
+                -- A survivor who died while the helicopter sat in the zone is
+                -- gone from the world for the wrong reason; the disappearance
+                -- check below would otherwise read as an embark.
+                if entry.killed_in_world then
+                    opscsar_log(
+                        name .. " left the pickup for pilot "
+                        .. tostring(entry.id)
+                        .. ", who is known dead; not counting a rescue."
+                    )
+                    return
+                end
+                local on_ground = timer.getTime() - (entry.embark_landed_at or 0)
+                -- Ground time alone is not boarding evidence: an AI helicopter
+                -- can sit in the zone well past the minimum and lift off with
+                -- the survivor still standing there. Require the same positive
+                -- signal the cluster check uses -- the survivor must have gone
+                -- from the map (DCS removes them the moment they board), or a
+                -- rescue helicopter must have carried them out of the zone.
+                if on_ground >= EMBARK_MIN_GROUND_TIME
+                    and survivor_in_world(entry) == nil then
+                    opscsar_log(
+                        name .. " lifted from the pickup after "
+                        .. math.floor(on_ground) .. "s on the ground."
+                    )
+                    record_rescue(entry, name, "embarked on")
+                    -- Cluster-mates walk to the same landing zone, so credit any
+                    -- who have gone from the map. Checked rather than assumed:
+                    -- one still standing there did not make it aboard in time.
+                    for _, mate in pairs(cluster_with(entry)) do
+                        if survivor_in_world(mate) == nil then
+                            record_rescue(mate, name, "embarked on")
+                        end
+                    end
+                elseif on_ground >= EMBARK_MIN_GROUND_TIME then
+                    opscsar_log(
+                        name .. " left the pickup for " .. tostring(entry.id)
+                        .. " after " .. math.floor(on_ground)
+                        .. "s on the ground, but the survivor is still in the "
+                        .. "world; not counting a rescue."
+                    )
+                else
+                    opscsar_log(
+                        name .. " left the pickup for " .. tostring(entry.id)
+                        .. " after only " .. math.floor(on_ground)
+                        .. "s; too brief to have loaded anyone."
+                    )
+                end
+                return
+            end
+        end
+    end
+
+    local embark_events = {}
+    function embark_events:onEvent(event)
+        -- Never let a handler error take the whole event system down.
+        pcall(function()
+            if event == nil or event.initiator == nil then
+                return
+            end
+            -- A helicopter's passengers only exist while it does. Reconcile
+            -- before the bare-LZ check below: the loss events carry no place,
+            -- and BIRTH of a respawned unit must clear a stale passenger list
+            -- even though it looks nothing like a pickup.
+            local nameOk, unit_name = pcall(function()
+                return event.initiator:getName()
+            end)
+            if nameOk and unit_name then
+                if event.id == world.event.S_EVENT_UNIT_LOST
+                    or event.id == world.event.S_EVENT_CRASH
+                    or event.id == world.event.S_EVENT_DEAD
+                    or event.id == world.event.S_EVENT_BIRTH then
+                    reconcile_heli_loss(unit_name)
+                end
+                -- A tracked survivor dying is a real death, not a boarding:
+                -- native embark removes the unit from the world with no DCS
+                -- event at all, so an explicit loss event for their unit is the
+                -- discriminator. state.json offers no way to un-credit a rescue
+                -- (Python trusts the UUID), so the death is settled here: every
+                -- rescue path refuses them below.
+                if event.id == world.event.S_EVENT_UNIT_LOST
+                    or event.id == world.event.S_EVENT_CRASH
+                    or event.id == world.event.S_EVENT_DEAD then
+                    local survivor_entry = tracked_by_unit[unit_name]
+                    if survivor_entry ~= nil and not survivor_entry.extracting
+                        and not survivor_entry.killed_in_world then
+                        survivor_entry.killed_in_world = true
+                        dirty_state = true
+                        opscsar_log(
+                            "Survivor " .. tostring(survivor_entry.id)
+                            .. " (" .. unit_name
+                            .. ") is dead; no rescue can be credited."
+                        )
+                    end
+                end
+            end
+            -- A place means an airfield, FARP or ship: that is an RTB, not a
+            -- pickup. The LZ is bare terrain, so DCS leaves it nil.
+            if event.place ~= nil then
+                return
+            end
+            if event.id == world.event.S_EVENT_LAND then
+                if is_ai_helicopter(event.initiator) then
+                    on_lz_landing(event.initiator)
+                end
+            elseif event.id == world.event.S_EVENT_TAKEOFF then
+                if is_ai_helicopter(event.initiator) then
+                    on_lz_takeoff(event.initiator)
+                end
+            end
+        end)
+    end
+
+    local function check_pickups()
+        for _, entry in pairs(tracked) do
+            if entry.done then
+                -- Whatever became of the pilot, a flight left in its hover would
+                -- never come home. Always give the route back.
+                release_hover(entry, "pilot no longer tracked")
+            else
+                local unit = survivor_in_world(entry)
+                if unit ~= nil then
+                    local ok, point = pcall(function()
+                        return unit:getPoint()
+                    end)
+                    if ok and point then
+                        entry.last_x, entry.last_z = point.x, point.z
+                        -- Their own altitude, i.e. the surface they are on --
+                        -- ground, or the sea. See begin_hover.
+                        entry.last_y = point.y
+                        -- Where they came down. They stay put until a helicopter
+                        -- lands for them, so this is the reference for "moved".
+                        if entry.origin_x == nil then
+                            entry.origin_x, entry.origin_z = point.x, point.z
+                        end
+                        local carrier = carried_out_of_zone(entry, point)
+                        if carrier then
+                            -- Being flown out: the pickup already happened,
+                            -- whatever the survivor's unit handle still claims.
+                            record_rescue(entry, carrier, "embarked on")
+                        else
+                            -- Remember the last rescue helicopter seen in the
+                            -- embark zone, with a timestamp. Attribution can't be
+                            -- done at vanish time alone: DCS removes the survivor
+                            -- the instant they board and the helicopter is already
+                            -- climbing away by the next poll, so a "is one here
+                            -- right now?" test races the takeoff and loses it.
+                            local helo =
+                                rescue_helo_near(entry.side, point.x, point.z)
+                            if helo then
+                                entry.helo_name = helo:getName()
+                                entry.helo_seen = timer.getTime()
+                                entry.helo_first_seen =
+                                    entry.helo_first_seen or entry.helo_seen
+                            end
+                            maybe_pop_smoke(entry, point.x, point.z)
+                        end
+                    end
+                    if not entry.done then
+                        -- A survivor still reporting as present long after a
+                        -- rescue helicopter turned up, without ever having left
+                        -- the zone, means neither signal is working. Said once, so
+                        -- a mission that reports no rescue says why rather than
+                        -- just falling silent.
+                        if entry.helo_first_seen ~= nil and not entry.stuck_logged
+                            and (timer.getTime() - entry.helo_first_seen)
+                                > STILL_HERE_WARN_AFTER
+                        then
+                            entry.stuck_logged = true
+                            opscsar_warn(
+                                "Pilot " .. entry.id .. " still reports as present "
+                                .. STILL_HERE_WARN_AFTER .. "s after "
+                                .. tostring(entry.helo_name) .. " reached the "
+                                .. "embark zone, and has never moved out of it. "
+                                .. "If they have gone from the map, the pickup "
+                                .. "will not be reported."
+                            )
+                        end
+                        -- Last, because completing the hoist destroys the survivor
+                        -- and everything above wants them still in the world.
+                        service_hover(entry)
+                    end
+                elseif entry.pickup_accepted then
+                    -- The survivor may disappear before their first poll, or
+                    -- after a poll has seen them. Either way, this is an accepted
+                    -- pickup whose outcome belongs to Boarded/delivery.
+                    opscsar_log(
+                        "Pilot " .. entry.id
+                        .. " is gone with an accepted pickup in flight; "
+                        .. "leaving the outcome to Boarded/delivery."
+                    )
+                elseif entry.last_x then
+                    -- Gone from the map. That is the moment a rescue registers, in
+                    -- both modes: DCS deletes the survivor as it loads them and
+                    -- fires no embark event, so this is the only signal there is.
+                    -- Count it if a rescue helicopter was in the embark zone
+                    -- recently enough to have loaded them — unless they are known
+                    -- dead: an explicit loss event settled their fate already, and
+                    -- a rescue credited here could never be corrected downstream.
+                    if entry.killed_in_world then
+                        entry.done = true
+                        opscsar_log(
+                            "Pilot " .. entry.id
+                            .. " is gone and was seen dead; not counting a rescue."
+                        )
+                    else
+                        local recent = entry.helo_seen ~= nil
+                            and (timer.getTime() - entry.helo_seen)
+                                <= RESCUE_ATTRIBUTION_WINDOW
+                        if recent then
+                            record_rescue(entry, entry.helo_name, "embarked on")
+                        elseif entry.moose_boarded then
+                            opscsar_log(
+                                "Pilot " .. entry.id .. " is aboard a player's "
+                                .. "helicopter; Ops.CSAR reports on delivery."
+                            )
+                        else
+                            opscsar_log(
+                                "Pilot " .. entry.id .. " is gone but no AI rescue "
+                                .. "helicopter was in the embark zone within "
+                                .. RESCUE_ATTRIBUTION_WINDOW .. "s; not counting a "
+                                .. "rescue. (A player pickup is reported by Ops.CSAR "
+                                .. "on delivery instead.)"
+                            )
+                        end
+                        entry.done = true
+                    end
+                else
+                    -- Never seen alive at all, so there is nothing to attribute.
+                    -- Logged rather than dropped silently: it means the survivor
+                    -- was missing on the very first poll, which points at the
+                    -- placement rather than at the rescue.
+                    opscsar_warn(
+                        "Pilot " .. entry.id .. " (unit '"
+                        .. tostring(entry.unit_name) .. "') was never in the world; "
+                        .. "no longer tracking them."
+                    )
+                    entry.done = true
+                end
+            end
+        end
+    end
+
+    -- ------------------------------------------------------------------
+    -- Wire up every downed pilot Retribution placed in the mission.
+    -- ------------------------------------------------------------------
+    local registered, watched = 0, 0
+    if type(cfg.downedPilots) == "table" then
+        for _, dp in pairs(cfg.downedPilots) do
+            local group_name = dp.groupName
+            if dp.id and group_name and group_name ~= "" then
+                local is_red = dp.coalition == "red"
+                local side_const = is_red and coalition.side.RED or coalition.side.BLUE
+                local instance = is_red and red_csar or blue_csar
+
+                local moose_group = GROUP:FindByName(group_name)
+                if moose_group == nil then
+                    opscsar_warn(
+                        "Downed pilot group '" .. group_name .. "' not found."
+                    )
+                else
+                    if register_with_ops_csar(
+                        instance,
+                        moose_group,
+                        dp.id,
+                        dp.description or "Downed pilot",
+                        dp.aircraft or "Pilot"
+                    ) then
+                        registered = registered + 1
+                    end
+                    local entry = {
+                        id = dp.id,
+                        group_name = group_name,
+                        unit_name = dp.unitName,
+                        side = side_const,
+                        -- Per pilot: the setting, or forced because they are in
+                        -- the water and nothing can land beside them.
+                        hover = dp.hoverExtraction == "true",
+                        -- Kept so a scripted hoist can tell Ops.CSAR to stop
+                        -- tracking a pilot who is aboard a helicopter.
+                        instance = instance,
+                        done = false,
+                        -- Where Retribution placed them, as a fallback reference
+                        -- for the embark zone before the first poll has run.
+                        spawn_x = tonumber(dp.x),
+                        spawn_z = tonumber(dp.z),
+                        last_x = nil,
+                        last_z = nil,
+                        last_y = nil,
+                        origin_x = nil,
+                        origin_z = nil,
+                        embark_helo = nil,
+                        embark_landed_at = nil,
+                        helo_name = nil,
+                        helo_seen = nil,
+                        helo_first_seen = nil,
+                        stuck_logged = false,
+                        moose_boarded = false,
+                        hover_group = nil,
+                        hover_since = nil,
+                        smoke_until = nil,
+                        -- Settled by explicit loss events on their unit: a
+                        -- survivor known dead can never be credited a rescue.
+                        killed_in_world = false,
+                        -- True while our own hoist is destroying them, so the
+                        -- scripted removal is not mistaken for a death.
+                        extracting = false,
+                        -- Set when a wrapped _PickupUnit actually accepted the
+                        -- pickup (membership recorded): the survivor vanishing
+                        -- from the map is then that pickup, not a disappearance,
+                        -- and Boarded/delivery own the outcome until they run.
+                        pickup_accepted = false,
+                    }
+                    table.insert(tracked, entry)
+                    tracked_by_id[dp.id] = entry
+                    if dp.unitName ~= nil and dp.unitName ~= "" then
+                        tracked_by_unit[dp.unitName] = entry
+                    end
+                    watched = watched + 1
+                end
+            end
+        end
+    end
+
+    if #tracked > 0 then
+        -- Passenger lifetime reconciliation must run in every pickup mode: a
+        -- crewed hover rescue boards a helicopter exactly like a landing-mode
+        -- one, so its boarding records need the same loss/respawn reconciling.
+        -- The LZ landing/takeoff evidence is harmless when every survivor needs
+        -- a hoist (hover entries never match the embark-zone check).
+        world.addEventHandler(embark_events)
+        local landing_pickups = 0
+        for _, entry in pairs(tracked) do
+            if not entry.hover then
+                landing_pickups = landing_pickups + 1
+            end
+        end
+        opscsar_log(
+            "Watching pilot lifetimes and AI LZ pickups ("
+            .. landing_pickups .. " of " .. #tracked .. " pilots land for pickup)."
+        )
+    end
+
+    if #tracked > 0 then
+        timer.scheduleFunction(function()
+            local ok, err = pcall(check_pickups)
+            if not ok then
+                opscsar_warn("CSAR pickup check failed: " .. tostring(err))
+            end
+            return timer.getTime() + CHECK_INTERVAL
+        end, nil, timer.getTime() + CHECK_INTERVAL)
+    end
+
+    opscsar_log(
+        "=== CSAR setup complete (" .. watched .. " downed pilots, "
+        .. registered .. " registered with Ops.CSAR) ==="
+    )
+end
+
+local ok, err = pcall(opscsar_main)
+if not ok then
+    env.error("[OpsCSAR] Fatal error: " .. tostring(err))
+end

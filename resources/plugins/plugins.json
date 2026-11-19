@@ -12,9 +12,10 @@
     "skynetiads",
     "splashdamage3",
     "airboss",
-    "MooseSoundhandler",    
+    "MooseSoundhandler",
     "MooseAutolase",
     "MooseMarkerOps",
     "intercept",
-    "MooseAtis"
+    "MooseAtis",
+    "opscsar"
 ]

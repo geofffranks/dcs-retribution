@@ -98,6 +98,13 @@ def _flight(
         coalition.doctrine.escort_spacing = feet(3000)
     flight.state.is_at_ip = at_ip
     flight.state.in_combat = in_combat
+    # The fuel rules under test predate manual waypoint timing and were written
+    # against the auto-timed path; a MagicMock's truthy attributes would
+    # otherwise route _assign_waypoint_tot through the manual cascade, whose
+    # waypoints (plan.waypoints) do not contain the mission points these tests
+    # drive through the generator.
+    flight.manually_timed = False
+    flight.manual_takeoff_time = None
     flight.unit_type.max_speed = knots(500)
     flight.unit_type.fuel_consumption = None
     flight.start_type = StartType.WARM

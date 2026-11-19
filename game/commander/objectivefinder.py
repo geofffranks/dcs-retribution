@@ -19,6 +19,8 @@ from game.theater import (
     NavalControlPoint,
     Player,
 )
+from game.ground_forces.ai_ground_planner import reserve_armor_for
+from game.squadrons.downedpilot import DownedPilot
 from game.theater.theatergroundobject import (
     BuildingGroundObject,
     IadsGroundObject,
@@ -33,6 +35,11 @@ if TYPE_CHECKING:
     from game.transfers import CargoShip, Convoy
 
 MissionTargetType = TypeVar("MissionTargetType", bound=MissionTarget)
+
+#: How far behind the nearest friendly control point an air-assault objective may
+#: sit. Bounds the operation itself, so it does not move with the staging field or
+#: the airframe's legs. See ObjectiveFinder._within_air_assault_reach.
+AIR_ASSAULT_MAX_REACH = nautical_miles(100)
 
 
 class ObjectiveFinder:
@@ -171,6 +178,23 @@ class ObjectiveFinder:
                 if projected_counts.get(ground_object.id, 0) > 0:
                     candidates.append(ground_object)
         yield from self._targets_by_range(candidates)
+
+    def downed_pilots(self) -> Iterator[DownedPilot]:
+        """Iterates over friendly downed pilots awaiting CSAR.
+
+        Ordered by proximity to friendly control points so the closest-to-base
+        pilots (the ones a rescue can most plausibly reach) are planned first.
+        """
+        settings = self.game.settings
+        csar_on = (
+            settings.csar_enabled
+            if self.is_player.is_blue
+            else settings.csar_enabled_red
+        )
+        if not csar_on:
+            return
+        coalition = self.game.coalition_for(self.is_player)
+        yield from self._targets_by_range(list(coalition.downed_pilots))
 
     def front_lines(self) -> Iterator[FrontLine]:
         """Iterates over all active front lines in the theater."""
@@ -327,6 +351,8 @@ class ObjectiveFinder:
         )
 
         for cp in combined_control_points:
+            if not self._within_air_assault_reach(cp):
+                continue
             if cp.is_isolated:
                 isolated.append(cp)
                 continue
@@ -337,6 +363,24 @@ class ObjectiveFinder:
         prioritized.extend(self._targets_by_range(capturable_later))
         prioritized.extend(self._targets_by_range(isolated))
         return prioritized
+
+    def _within_air_assault_reach(self, cp: ControlPoint) -> bool:
+        """Is this objective close enough to our own lines to air-assault?
+
+        Measured to the nearest friendly control point, not to the staging field,
+        so the answer does not change with whichever base happens to launch it.
+
+        Without this, a long-legged transport volunteers for objectives on the far
+        side of the theatre: an Afghanistan turn-2 ATO fragged C-130s from Bagram
+        against Kandahar (269 NM) and FOB Zeebrugge (261 NM), both ~180 NM behind
+        the nearest friendly base. Helicopters were never able to reach that far,
+        so the flat list only became a problem once fixed-wing became eligible.
+        """
+        friendly = list(self.friendly_control_points())
+        if not friendly:
+            return False
+        nearest = min(cp.distance_to(other) for other in friendly)
+        return nearest <= AIR_ASSAULT_MAX_REACH.meters
 
     @staticmethod
     def closest_airfields_to(location: MissionTarget) -> ClosestAirfields:

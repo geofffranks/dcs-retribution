@@ -19,6 +19,19 @@ if TYPE_CHECKING:
     from .missionproposals import ProposedFlight
 
 
+def assault_flight_size(task: FlightType, aircraft: AircraftType, proposed: int) -> int:
+    """Fixed-wing air assault flies single-ship.
+
+    One transport paradrops the whole stick, so a second only doubles the troops
+    delivered. Helicopters keep the proposed size -- their lift is per airframe.
+    Applied after the squadron is picked, because the airframe is not known when
+    the flight is proposed.
+    """
+    if task is FlightType.AIR_ASSAULT and not aircraft.helicopter:
+        return 1
+    return proposed
+
+
 class PackageBuilder:
     """Builds a Package for the flights it receives."""
 
@@ -74,10 +87,14 @@ class PackageBuilder:
         if start_type is None:
             start_type = self.start_type
 
+        num_aircraft = assault_flight_size(
+            plan.task, squadron.aircraft, plan.num_aircraft
+        )
+
         flight = Flight(
             self.package,
             squadron,
-            plan.num_aircraft,
+            num_aircraft,
             plan.task,
             start_type,
             divert=self.find_divert_field(squadron.aircraft, squadron.location),
@@ -88,15 +105,15 @@ class PackageBuilder:
                 squadron.coalition.game.settings,
                 self.laser_code_registry,
             )
-        # If this is a client flight, set the start_type again to match the configured default
+        # Now the roster exists, re-derive the start type: a client flight follows
+        # the player default, and some tasks (CSAR) have one of their own.
         # https://github.com/dcs-liberation/dcs_liberation/issues/1567
-        if (
-            squadron.location.required_aircraft_start_type is None
-            and flight.roster is not None
-            and flight.roster.player_count > 0
-        ):
-            flight.start_type = (
-                squadron.coalition.game.settings.default_start_type_client
+        # A base that dictates its own start type (carriers, off-map spawns) wins.
+        if squadron.location.required_aircraft_start_type is None:
+            flight.start_type = squadron.coalition.game.settings.start_type_for(
+                plan.task,
+                has_players=flight.roster is not None
+                and flight.roster.player_count > 0,
             )
         self.package.add_flight(flight)
         return True
