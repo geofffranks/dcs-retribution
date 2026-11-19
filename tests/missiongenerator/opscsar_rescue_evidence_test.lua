@@ -32,7 +32,8 @@
 --   lua    tests/missiongenerator/opscsar_rescue_evidence_test.lua
 --   luajit tests/missiongenerator/opscsar_rescue_evidence_test.lua
 
-local SCRIPT = "resources/plugins/opscsar/OpsCSAR.lua"
+local SCRIPT = os.getenv("OPSCSAR_SCRIPT")
+    or "resources/plugins/opscsar/OpsCSAR.lua"
 
 local world_events = {
     S_EVENT_BIRTH = 1,
@@ -161,14 +162,21 @@ local function setup(downed_pilots, cfg_overrides)
     }
 
     -- A minimal but contract-faithful MOOSE CSAR class: the pickup stub does
-    -- what Moose.lua 79083-79095 does (membership, group destroyed, Boarded
-    -- +5s); the delivery stub does what 79283-79292 does (count, clear
-    -- membership, Rescued through the delayed-transition abs(-1) = 1s, with
-    -- the negative-event dedup); boardings/deliveries run the handlers the
-    -- script attached to the instance.
+    -- what Moose.lua 79064-79095 does — the cabin-capacity guard first
+    -- (_PilotsOnboard + 1 > AircraftType[type] or max_units: refuse with no
+    -- membership, no group destroy, no Boarded), then membership with the
+    -- bundled field shape, group destroyed, Boarded +5s; the delivery stub
+    -- does what 79283-79292 does (count, clear membership, Rescued through
+    -- the delayed-transition abs(-1) = 1s, with the negative-event dedup);
+    -- boardings/deliveries run the handlers the script attached to the
+    -- instance.
     CSAR = {
         New = function(_, side, template, alias)
-            local inst = { lid = "", inTransitGroups = {} }
+            local inst = {
+                lid = "",
+                inTransitGroups = {},
+                max_units = 99, -- generous unless a test tightens it
+            }
             function inst:__Start(_delay) end
             function inst:__Boarded(delay, heli_name, wounded_group_name)
                 schedule(delay, function()
@@ -201,13 +209,51 @@ local function setup(downed_pilots, cfg_overrides)
             end
             function inst:_PickupUnit(heli_unit, _pilot_name, _wounded_group, wounded_group_name)
                 local hn = heli_unit:GetName()
+                local units_in_helicopter = 0
+                for _ in pairs(self.inTransitGroups[hn] or {}) do
+                    units_in_helicopter = units_in_helicopter + 1
+                end
+                local max_units = self.max_units
+                if heli_unit.GetTypeName ~= nil then
+                    local by_type = self.AircraftType
+                        and self.AircraftType[heli_unit:GetTypeName()]
+                    if by_type ~= nil then
+                        max_units = by_type
+                    end
+                end
+                if units_in_helicopter + 1 > max_units then
+                    -- Cabin full: MOOSE refuses here — no membership, no group
+                    -- destroy, no Boarded (Moose.lua 79073-79).
+                    return
+                end
                 self.inTransitGroups[hn] = self.inTransitGroups[hn] or {}
-                self.inTransitGroups[hn][wounded_group_name] = { woundedGroup = wounded_group_name }
+                self.inTransitGroups[hn][wounded_group_name] = {
+                    originalUnit = nil,
+                    woundedGroup = wounded_group_name,
+                    side = "blue",
+                    desc = "Downed pilot",
+                    player = false,
+                }
                 local survivor = world_groups[wounded_group_name]
                 if survivor ~= nil then
                     units_by_name[survivor] = nil -- the group is destroyed
                 end
                 self:__Boarded(5, hn, wounded_group_name)
+                -- Model _ScheduledSARFlight's ScheduleOnce(5, ...) re-check:
+                -- every 5s the membership for a helicopter that no longer
+                -- exists under this name is dropped (_GetSARHeli nil).
+                schedule(5, function()
+                    if units_by_name[hn] == nil then
+                        self.inTransitGroups[hn] = nil
+                    elseif self.inTransitGroups[hn] ~= nil
+                        and next(self.inTransitGroups[hn]) ~= nil then
+                        schedule(5, function()
+                            if units_by_name[hn] == nil then
+                                self.inTransitGroups[hn] = nil
+                            end
+                        end)
+                    end
+                end)
             end
             function inst:_RescuePilots(heli_unit)
                 local hn = heli_unit:GetName()
@@ -776,6 +822,76 @@ local function test_cross_coalition_instances_credit_independently()
         "blue and red instances credit their own rescues independently")
 end
 
+-- C3-refused-pickup-credit: a full cabin refuses the second pickup. The
+-- refused survivor stays alive on the ground, is never credited for the other
+-- pilot's delivery, and remains available for a later genuine pickup once the
+-- cabin empties.
+local function test_full_cabin_refusal_is_not_a_rescue_and_keeps_survivor_available()
+    local dp1 = pilot("uuid-aboard", "Group FA", "Survivor FA")
+    local dp2 = pilot("uuid-refused", "Group FB", "Survivor FB")
+    setup({ dp1, dp2 })
+    local my = assert(csar_instances[1], "Ops.CSAR instance not built")
+    my.max_units = 1 -- single-seat cabin (Moose.lua 79073-79 guard)
+
+    set_in_world("Helo 1", true)
+    pickup(my, "Helo 1", "Group FA") -- accepted
+    advance(5) -- Boarded FA accepted
+    pickup(my, "Helo 1", "Group FB") -- capacity 1: refused, survivor stays
+
+    check(units_by_name["Survivor FB"] ~= nil,
+        "a refused pickup leaves the survivor alive in the world")
+
+    deliver(my, "Helo 1")
+    advance(1)
+    check(sorted_rescued() == "uuid-aboard",
+        "delivery credits the accepted pilot only, not the refused one")
+
+    -- The cabin is empty again: a later genuine pickup of the refused
+    -- survivor is accepted and delivered.
+    pickup(my, "Helo 1", "Group FB")
+    advance(5)
+    deliver(my, "Helo 1")
+    advance(1)
+    check(sorted_rescued() == "uuid-aboard,uuid-refused",
+        "the refused survivor is delivered by the later genuine pickup")
+end
+
+-- A refused attempt alongside an unrelated pending pickup: the refusal settles
+-- nothing about anyone. When the helicopter is then lost, only the pilot
+-- actually picked up is reconciled as lost; the refused survivor stays
+-- available and a later genuine pickup delivers them.
+local function test_rejected_attempt_with_pending_pickup_then_loss()
+    local dp1 = pilot("uuid-pending-a", "Group RA", "Survivor RA")
+    local dp2 = pilot("uuid-refused-b", "Group RB", "Survivor RB")
+    setup({ dp1, dp2 })
+    local my = assert(csar_instances[1], "Ops.CSAR instance not built")
+    my.max_units = 1
+
+    set_in_world("Helo 1", true)
+    pickup(my, "Helo 1", "Group RA") -- accepted, pending (Boarded due t5)
+    advance(5) -- Boarded RA accepted; the returning loop re-arms
+    pickup(my, "Helo 1", "Group RB") -- capacity 1: refused, B untouched
+
+    heli_event(world_events.S_EVENT_UNIT_LOST, heli_unit("Helo 1", 0, 0))
+    set_in_world("Helo 1", true, 202) -- same-name respawn
+    heli_event(world_events.S_EVENT_BIRTH, heli_unit("Helo 1", 0, 0))
+    advance(3) -- the returning loop clears the dead lifetime's membership
+
+    -- Another rescue flight (empty cabin) picks the refused survivor up and
+    -- delivers them.
+    set_in_world("Helo 2", true)
+    pickup(my, "Helo 2", "Group RB")
+    advance(5)
+    deliver(my, "Helo 2")
+    advance(1)
+
+    check(sorted_rescued() == "uuid-refused-b",
+        "only the refused survivor's later genuine delivery reports; the "
+        .. "pilot picked up by the lost helicopter does not")
+    check(units_by_name["Survivor RB"] == nil,
+        "the refused survivor is gone from the world at their real pickup")
+end
+
 local function main()
     test_landing_without_boarding_is_not_a_rescue()
     test_landing_with_boarding_still_credits()
@@ -789,6 +905,8 @@ local function main()
     test_pending_pickup_delivered_before_its_boarding()
     test_single_fast_delivery_credits_once()
     test_cross_coalition_instances_credit_independently()
+    test_full_cabin_refusal_is_not_a_rescue_and_keeps_survivor_available()
+    test_rejected_attempt_with_pending_pickup_then_loss()
     test_all_hover_mission_still_registers_lifetimes()
     test_death_during_wait_then_takeoff_is_not_a_rescue()
     test_poll_death_is_not_a_rescue_but_embark_still_is()

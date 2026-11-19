@@ -379,25 +379,44 @@ local function opscsar_main()
 
         -- Wrapper: _PickupUnit is the one place every MOOSE pickup passes
         -- (all three call sites), and it runs BEFORE the 5s-delayed Boarded,
-        -- while the picking aircraft is in hand. Record its DCS runtime id
-        -- per survivor so the delayed Boarded can be tied to the aircraft
-        -- that actually made the pickup. Original behavior untouched.
+        -- while the picking aircraft is in hand. But the original can refuse
+        -- the pickup without boarding anyone — the cabin-capacity guard
+        -- (Moose.lua 79073-79: _PilotsOnboard + 1 > AircraftType[type] or
+        -- max_units) returns before creating membership, destroying the group
+        -- or scheduling Boarded, and the landed call sites do not pre-check —
+        -- so identity is recorded only when the original actually accepted:
+        -- inTransitGroups[heliName][woundedGroupName] exists afterwards. A
+        -- refused survivor stays alive on the ground, unrecorded, available
+        -- for a later genuine pickup. Original behavior untouched.
         local original_pickup = my._PickupUnit
         if type(original_pickup) == "function" then
             my._PickupUnit = function(inst, heli_unit, pilot_name, wounded_group, wounded_group_name, ...)
+                local result = original_pickup(
+                    inst, heli_unit, pilot_name, wounded_group,
+                    wounded_group_name, ...
+                )
                 local heli_name = unit_name_of(heli_unit)
                 local entry = wounded_group_name ~= nil
                     and tracked_by_group(wounded_group_name) or nil
                 if heli_name ~= nil and entry ~= nil then
-                    pending_pickup_ids[heli_name] =
-                        pending_pickup_ids[heli_name] or {}
-                    pending_pickup_ids[heli_name][wounded_group_name] =
-                        dcs_unit_id(heli_name)
+                    local accepted = type(inst.inTransitGroups) == "table"
+                        and inst.inTransitGroups[heli_name] ~= nil
+                        and inst.inTransitGroups[heli_name][wounded_group_name]
+                            ~= nil
+                    if accepted then
+                        pending_pickup_ids[heli_name] =
+                            pending_pickup_ids[heli_name] or {}
+                        pending_pickup_ids[heli_name][wounded_group_name] =
+                            dcs_unit_id(heli_name)
+                    else
+                        opscsar_log(
+                            "Pickup of pilot " .. entry.id .. " by "
+                            .. tostring(heli_name)
+                            .. " was not accepted; pilot stays awaiting pickup."
+                        )
+                    end
                 end
-                return original_pickup(
-                    inst, heli_unit, pilot_name, wounded_group,
-                    wounded_group_name, ...
-                )
+                return result
             end
         end
 
@@ -411,41 +430,74 @@ local function opscsar_main()
         -- (delayed 1s and instance-wide deduplicated by the FSM, so one
         -- helicopter's delivery can cancel another's callback) nor a
         -- helicopter lost inside that second can strand or erase it.
+        --
+        -- Credit is the intersection with the ACTUAL delivered membership
+        -- (captured before the original clears it, keyed by wounded group
+        -- name): a pickup the original refused — full cabin, survivor still
+        -- on the ground — was never recorded (see the _PickupUnit wrapper)
+        -- and would not be in the membership anyway, so no tracked pilot can
+        -- be credited for a handover that never happened. Anything tracked
+        -- but not in the delivered membership (a genuinely still-pending
+        -- pickup) is preserved untouched for a later real delivery.
         local original_rescue = my._RescuePilots
         if type(original_rescue) == "function" then
             my._RescuePilots = function(inst, heli_unit, ...)
                 local heli_name = heli_unit ~= nil and unit_name_of(heli_unit)
                     or nil
-                -- Actual membership check, before the original clears it.
-                local delivering = heli_name ~= nil
+                -- Actual membership check and capture, before the original
+                -- clears it.
+                local membership = heli_name ~= nil
                     and type(inst.inTransitGroups) == "table"
-                    and inst.inTransitGroups[heli_name] ~= nil or false
+                    and inst.inTransitGroups[heli_name] or nil
                 local result = original_rescue(inst, heli_unit, ...)
-                if delivering then
-                    -- Credit everything tracked that was aboard: acknowledged
-                    -- boardings plus pickups whose Boarded had not run yet
-                    -- (MOOSE counts them in PilotsSaved all the same). Pending
-                    -- identities are retired here, so a late Boarded from a
-                    -- lifetime that was delivered past its event cannot
-                    -- recreate the entry, and the entries are settled done so
-                    -- no other path can double-report them.
+                if membership ~= nil then
                     local aboard = onboard[heli_name]
                     local pend = pending_pickup_ids[heli_name]
                     onboard[heli_name] = nil
                     pending_pickup_ids[heli_name] = nil
                     local credited = {}
+                    -- Acknowledged boardings: delivered members by
+                    -- construction, intersected defensively anyway.
                     if aboard ~= nil then
                         for _, uuid in ipairs(aboard) do
-                            credited[#credited + 1] = uuid
+                            local entry = tracked_by_id[uuid]
+                            if entry == nil
+                                or membership[entry.group_name] ~= nil then
+                                credited[#credited + 1] = uuid
+                            else
+                                -- Boarded but not in the delivered membership:
+                                -- keep them aboard rather than guess.
+                                onboard[heli_name] = onboard[heli_name] or {}
+                                table.insert(onboard[heli_name], uuid)
+                                opscsar_log(
+                                    "Pilot " .. uuid
+                                    .. " was aboard but not among the delivered "
+                                    .. "members; still recorded aboard "
+                                    .. tostring(heli_name) .. "."
+                                )
+                            end
                         end
                     end
+                    -- Pending pickups: credited only when actually delivered;
+                    -- others stay pending for a later genuine pickup.
+                    local still_pending = nil
                     if pend ~= nil then
                         for wounded_group_name, _recorded_id in pairs(pend) do
-                            local entry = tracked_by_group(wounded_group_name)
-                            if entry ~= nil and not entry.done then
-                                entry.done = true
-                                credited[#credited + 1] = entry.id
+                            if membership[wounded_group_name] ~= nil then
+                                local entry =
+                                    tracked_by_group(wounded_group_name)
+                                if entry ~= nil and not entry.done then
+                                    entry.done = true
+                                    credited[#credited + 1] = entry.id
+                                end
+                            else
+                                still_pending = still_pending or {}
+                                still_pending[wounded_group_name] =
+                                    pend[wounded_group_name]
                             end
+                        end
+                        if still_pending ~= nil then
+                            pending_pickup_ids[heli_name] = still_pending
                         end
                     end
                     for _, uuid in ipairs(credited) do
