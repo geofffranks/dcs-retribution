@@ -226,15 +226,29 @@ local function onEvent(event)
     if event.id == world.event.S_EVENT_LANDING_AFTER_EJECTION and event.initiator then
         local posOk, position = pcall(function() return event.initiator:getPoint() end)
         if posOk and position then
-            -- Refine the most recent ejection that has no landing position yet.
-            for i = #ejection_events, 1, -1 do
-                local ej = ejection_events[i]
-                if not ej.landed then
-                    ej.x = position.x
-                    ej.z = position.z
-                    ej.landed = true
-                    dirty_state = true
-                    break
+            -- The initiator is the parachutist; per the DCS scripting engine the
+            -- event's `place` is the aircraft the pilot ejected from (it can be
+            -- invalid if that aircraft was destroyed). Only refine the recorded
+            -- ejection whose unit name matches that aircraft: a landing from
+            -- another side's or another aircraft's ejection must never overwrite
+            -- it, and with no identifiable place the recorded ejection position
+            -- stays as it was.
+            local nameOk, aircraft_name = pcall(function()
+                if event.place and event.place.getName then
+                    return event.place:getName()
+                end
+                return nil
+            end)
+            if nameOk and aircraft_name then
+                for i = #ejection_events, 1, -1 do
+                    local ej = ejection_events[i]
+                    if not ej.landed and ej.unit == aircraft_name then
+                        ej.x = position.x
+                        ej.z = position.z
+                        ej.landed = true
+                        dirty_state = true
+                        break
+                    end
                 end
             end
         end

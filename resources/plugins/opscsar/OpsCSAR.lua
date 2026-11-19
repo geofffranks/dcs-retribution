@@ -159,6 +159,34 @@ local function opscsar_main()
         return nil
     end
 
+    -- Passengers recorded aboard a helicopter live only as long as that
+    -- helicopter does. MOOSE clears its own inTransitGroups when the SAR
+    -- helicopter is gone (see its UnitLost handling in CTLD/CSAR) but knows
+    -- nothing of our onboard table, so reconcile it here: on the helicopter's
+    -- loss -- or a same-name respawn standing in for a missed loss event --
+    -- the boarding record is dropped and the pilots it carried are marked so
+    -- a delayed Boarded callback from the previous aircraft lifetime cannot
+    -- re-board them. Their fate follows the ordinary lost path instead of
+    -- being credited when the replacement aircraft delivers somebody else.
+    local function reconcile_heli_loss(name)
+        local aboard = onboard[name]
+        if aboard == nil then
+            return
+        end
+        onboard[name] = nil
+        dirty_state = true
+        for _, uuid in pairs(aboard) do
+            local entry = tracked_by_id[uuid]
+            if entry ~= nil then
+                entry.lost_in_transit = true
+            end
+            opscsar_log(
+                "Pilot " .. tostring(uuid) .. " was aboard " .. tostring(name)
+                .. " when it was lost; rescue not credited."
+            )
+        end
+    end
+
     local function make_csar(side_name, side_const, template)
         if CSAR == nil then
             opscsar_warn("MOOSE Ops.CSAR not found; player CSAR unavailable.")
@@ -215,6 +243,27 @@ local function opscsar_main()
             -- not, and the rescue goes unrecorded. Our list has no such window.
             local entry = tracked_by_group(Woundedgroupname)
             if entry == nil or not Heliname then
+                return
+            end
+            -- A pilot who went down with a lost helicopter cannot board again:
+            -- a Boarded raised for them afterwards is a delayed callback from
+            -- the previous aircraft lifetime, not a fresh pickup.
+            if entry.lost_in_transit then
+                opscsar_log(
+                    "Ignoring boarding of pilot " .. entry.id .. " by "
+                    .. tostring(Heliname) .. ": that helicopter was lost with "
+                    .. "them aboard."
+                )
+                return
+            end
+            -- The helicopter itself must still exist; a boarding reported for a
+            -- unit no longer in the world can never be delivered.
+            local heli = Unit.getByName(Heliname)
+            if heli == nil or not heli:isExist() then
+                opscsar_log(
+                    "Ignoring boarding of pilot " .. entry.id .. " by "
+                    .. tostring(Heliname) .. ": the helicopter is gone."
+                )
                 return
             end
             -- Theirs to report now. Ops.CSAR credits the rescue on delivery, not
@@ -691,7 +740,14 @@ local function opscsar_main()
             if not entry.done and entry.embark_helo == name then
                 local on_ground = timer.getTime() - (entry.embark_landed_at or 0)
                 entry.embark_helo = nil
-                if on_ground >= EMBARK_MIN_GROUND_TIME then
+                -- Ground time alone is not boarding evidence: an AI helicopter
+                -- can sit in the zone well past the minimum and lift off with
+                -- the survivor still standing there. Require the same positive
+                -- signal the cluster check uses -- the survivor must have gone
+                -- from the map (DCS removes them the moment they board), or a
+                -- rescue helicopter must have carried them out of the zone.
+                if on_ground >= EMBARK_MIN_GROUND_TIME
+                    and survivor_in_world(entry) == nil then
                     opscsar_log(
                         name .. " lifted from the pickup after "
                         .. math.floor(on_ground) .. "s on the ground."
@@ -705,6 +761,13 @@ local function opscsar_main()
                             record_rescue(mate, name, "embarked on")
                         end
                     end
+                elseif on_ground >= EMBARK_MIN_GROUND_TIME then
+                    opscsar_log(
+                        name .. " left the pickup for " .. tostring(entry.id)
+                        .. " after " .. math.floor(on_ground)
+                        .. "s on the ground, but the survivor is still in the "
+                        .. "world; not counting a rescue."
+                    )
                 else
                     opscsar_log(
                         name .. " left the pickup for " .. tostring(entry.id)
@@ -723,6 +786,21 @@ local function opscsar_main()
         pcall(function()
             if event == nil or event.initiator == nil then
                 return
+            end
+            -- A helicopter's passengers only exist while it does. Reconcile
+            -- before the bare-LZ check below: the loss events carry no place,
+            -- and BIRTH of a respawned unit must clear a stale passenger list
+            -- even though it looks nothing like a pickup.
+            local nameOk, unit_name = pcall(function()
+                return event.initiator:getName()
+            end)
+            if nameOk and unit_name then
+                if event.id == world.event.S_EVENT_UNIT_LOST
+                    or event.id == world.event.S_EVENT_CRASH
+                    or event.id == world.event.S_EVENT_DEAD
+                    or event.id == world.event.S_EVENT_BIRTH then
+                    reconcile_heli_loss(unit_name)
+                end
             end
             -- A place means an airfield, FARP or ship: that is an RTB, not a
             -- pickup. The LZ is bare terrain, so DCS leaves it nil.

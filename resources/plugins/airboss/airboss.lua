@@ -451,10 +451,14 @@ function AddShipAWACS(nameOfCarrier)
         awacsTED:__Start(1)
 
         function awacsTED:OnAfterStart(From, Event, To)
+            -- `self` is the tanker object this FSM event fires on. The
+            -- awacsTED global is reassigned by every carrier's spawn callback,
+            -- so with two deferred spawns the global can point at the other
+            -- carrier's tanker by the time this fires — read self instead.
             local airbossInstance = AirbossInstances[nameOfCarrier]
             if airbossInstance then
                 env.info("AIRBOSS: DETECTED FOR AWACS on carrier " .. nameOfCarrier)
-                airbossInstance:SetAWACS(awacsTED)
+                airbossInstance:SetAWACS(self)
             else
                 env.info("AIRBOSS: No Airboss instance found for carrier " .. nameOfCarrier .. ", AWACS not set")
             end
