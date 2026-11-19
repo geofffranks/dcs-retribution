@@ -2,6 +2,11 @@
 
 ## Features/Improvements
 * **[Mission Generator]** Motorpool target missions now match their mission-type counterparts: STRIKE keeps one player target waypoint per parked vehicle with one AI bombing task per vehicle at ingress; BAI gets a single player target-area waypoint with one AI engage task per unit-type group at ingress; armed recon gets a single player target waypoint with a garage-centered engagement zone sized to a full 5x5 parked grid plus 20 m, independent of the configured engagement range.
+* **[Campaign]** Search & Rescue is now campaign-persistent: downed pilots stay on the map across turns, can be rescued by player or AI CSAR flights, and otherwise expire to MIA or become POWs (freeing their camp returns them). Survivors appear on the map and in the debrief, old saves opt existing squadrons in automatically, and rescue/recovery state survives save/reload.
+* **[Plugins]** Lua plugin settings can now expose drop-down choices in the UI, not just on/off toggles.
+* **[Plugins]** Airboss now supports multiple carriers per mission (relay/rescue helo, tanker and AWACS are wired to the right carrier), and each carrier's SRS transmissions follow its rescue helo instead of freezing at spawn.
+* **[UI]** Revised the mission start screen instructions.
+
 * **[Mission Generator]** Per-squadron QRA interceptor reserve: OPFOR (and opt-in OWNFOR) squadrons scramble in-air interceptors via the Moose AI_A2A_DISPATCHER against incoming air-to-ground raids detected by the IADS/EWR network. Scramble/engage radius, spawn altitude, grouping, and radio callouts are campaign-doctrine settings.
 * **[Mission Generator]** Keep carriers and LHAs clear of the shore during movement and mission generation, with configurable standoff warnings.
 * **[UX]** Add per-tanker orbit-speed controls with Auto and bounded manual KIAS modes.
