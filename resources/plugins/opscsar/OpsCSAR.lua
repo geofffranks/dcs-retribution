@@ -47,13 +47,6 @@ local RESCUE_ATTRIBUTION_WINDOW = 120
 -- than the walk to the helicopter and the Embarking task's own hold.
 local STILL_HERE_WARN_AFTER = 420
 
--- MOOSE schedules CSAR's Boarded event exactly 5s after the pickup
--- (CSAR:_PickupUnit -> __Boarded(5, ...)). A Boarded reported within this much
--- of the helicopter's loss therefore describes the previous aircraft lifetime —
--- the pickup happened before the loss, however a same-name respawn confuses
--- every name-based check. Slack covers event/timer dispatch ordering.
-local BOARDING_STALE_SECONDS = 8
-
 -- The AI embark, watched from the helicopter's side (landing mode only).
 --
 -- Once troops are loaded they stop being a unit anyone can query, so every test
@@ -151,9 +144,39 @@ local function opscsar_main()
     -- ------------------------------------------------------------------
     local blue_csar, red_csar = nil, nil
     local onboard = {} -- helo unit name -> list of pilot UUIDs aboard
-    -- Last time (event clock) each helicopter name was seen lost. A Boarded
-    -- reported shortly after a loss is the previous lifetime's delayed callback.
-    local heli_lost_at = {}
+    -- helo unit name -> { wounded group name -> DCS runtime unit id }: the
+    -- actual aircraft identity that made each pickup, recorded by the
+    -- _PickupUnit wrapper at the real pickup moment (the delayed Boarded comes
+    -- 5s later, when a same-name respawn can already have taken the name).
+    local pending_pickup_ids = {}
+    -- helo unit name -> FIFO of delivered passenger lists, snapshotted by the
+    -- _RescuePilots wrapper at the real delivery transition. MOOSE raises the
+    -- Rescued event on a scheduled callback (FSM:_delayed_transition abs()'s
+    -- __Rescued(-1) to 1s), and a helicopter lost inside that second must not
+    -- erase a rescue that already happened.
+    local delivered_batches = {}
+
+    -- The DCS runtime id of the live unit under `name`, or nil. Ids differ
+    -- between a destroyed helicopter and its same-name respawn, which is the
+    -- identity a name lookup cannot provide.
+    local function dcs_unit_id(name)
+        local ok, id = pcall(function()
+            local unit = Unit.getByName(name)
+            if unit ~= nil and unit:isExist() then
+                return unit:getID()
+            end
+            return nil
+        end)
+        return ok and id or nil
+    end
+
+    -- The name of a MOOSE UNIT object, or nil.
+    local function unit_name_of(moose_unit)
+        local ok, name = pcall(function()
+            return moose_unit:GetName()
+        end)
+        return ok and name or nil
+    end
 
     -- Declared up here so the Ops.CSAR callbacks below can resolve a survivor
     -- back to their Retribution id. Populated further down.
@@ -171,24 +194,32 @@ local function opscsar_main()
     end
 
     -- Passengers recorded aboard a helicopter live only as long as that
-    -- helicopter does. MOOSE clears its own inTransitGroups when the SAR
-    -- helicopter is gone (CSAR:_ScheduledSARFlight drops the table when
-    -- _GetSARHeli is nil) but knows nothing of our onboard table, so reconcile
-    -- it here: on the helicopter's loss -- or a same-name respawn standing in
-    -- for a missed loss event -- the boarding record is dropped and the pilots
-    -- it carried are marked so a delayed Boarded callback from the previous
-    -- aircraft lifetime cannot re-board them.
-    --
-    -- A loss also stamps heli_lost_at[name]: MOOSE delivers Boarded exactly 5s
-    -- after its _PickupUnit, so a Boarded arriving shortly after a loss is the
-    -- previous lifetime's callback even when a respawn has already taken the
-    -- name (MOOSE's own onbeforeBoarded does not reject it, and a same-name
-    -- respawn keeps inTransitGroups from being cleared). Pilots MOOSE still
-    -- lists in transit on the lost helicopter — picked up, group destroyed,
-    -- Boarded not yet run — are marked here from its actual membership.
-    local function reconcile_heli_loss(name, is_birth)
-        if not is_birth then
-            heli_lost_at[name] = timer.getTime()
+    -- A helicopter's passengers — recorded aboard, and pickups whose delayed
+    -- Boarded has not run yet — live only as long as that helicopter does.
+    -- Reconciliation runs on its loss (UNIT_LOST/CRASH/DEAD) and on a same-name
+    -- BIRTH standing in for a missed loss event: the boarding records and the
+    -- pickup identities recorded at the real pickup moment are marked and
+    -- dropped, so neither the lost pilots nor a delayed Boarded callback from
+    -- the previous aircraft lifetime can be credited to the replacement.
+    -- Delivered batches are deliberately untouched: those passengers were
+    -- handed over at the delivery transition and their Rescued callback is
+    -- still in flight.
+    local function reconcile_heli_loss(name)
+        local pend = pending_pickup_ids[name]
+        if pend ~= nil then
+            pending_pickup_ids[name] = nil
+            for wounded_group_name, _recorded_id in pairs(pend) do
+                local entry = tracked_by_group(wounded_group_name)
+                if entry ~= nil and not entry.lost_in_transit then
+                    entry.lost_in_transit = true
+                    dirty_state = true
+                    opscsar_log(
+                        "Pilot " .. tostring(entry.id)
+                        .. " was being picked up by " .. tostring(name)
+                        .. " when it was lost; rescue not credited."
+                    )
+                end
+            end
         end
 
         local aboard = onboard[name]
@@ -204,27 +235,6 @@ local function opscsar_main()
                     "Pilot " .. tostring(uuid) .. " was aboard " .. tostring(name)
                     .. " when it was lost; rescue not credited."
                 )
-            end
-        end
-
-        -- Pending pickups recorded in MOOSE's own membership for this name.
-        for _, inst in pairs({ blue_csar, red_csar }) do
-            local in_transit =
-                inst ~= nil and type(inst.inTransitGroups) == "table"
-                and inst.inTransitGroups[name] or nil
-            if type(in_transit) == "table" then
-                for wounded_group_name, _info in pairs(in_transit) do
-                    local entry = tracked_by_group(wounded_group_name)
-                    if entry ~= nil and not entry.lost_in_transit then
-                        entry.lost_in_transit = true
-                        dirty_state = true
-                        opscsar_log(
-                            "Pilot " .. tostring(entry.id)
-                            .. " was being picked up by " .. tostring(name)
-                            .. " when it was lost; rescue not credited."
-                        )
-                    end
-                end
             end
         end
     end
@@ -298,22 +308,28 @@ local function opscsar_main()
                 )
                 return
             end
-            -- MOOSE raises Boarded exactly 5s after its pickup. A boarding of a
-            -- helicopter that died within that window describes the previous
-            -- lifetime even when a same-name respawn is already alive — MOOSE's
-            -- own onbeforeBoarded does not reject it (_GetSARHeli answers for
-            -- the replacement), and this handler cannot tell the two aircraft
-            -- apart by name alone.
-            local lost_at = heli_lost_at[Heliname]
-            if lost_at ~= nil
-                and timer.getTime() - lost_at <= BOARDING_STALE_SECONDS then
-                opscsar_log(
-                    "Ignoring boarding of pilot " .. entry.id .. " by "
-                    .. tostring(Heliname) .. ": reported "
-                    .. math.floor(timer.getTime() - lost_at)
-                    .. "s after that helicopter's loss."
-                )
-                return
+            -- MOOSE raises Boarded exactly 5s after its _PickupUnit, and after
+            -- a same-name respawn nothing name-based can tell the aircraft that
+            -- made the pickup from its replacement (MOOSE's onbeforeBoarded
+            -- rejects nothing and its inTransitGroups survives because
+            -- _GetSARHeli answers for the respawn). The wrapper on _PickupUnit
+            -- recorded the picking aircraft's DCS runtime id at the real
+            -- pickup; a mismatch here is the previous lifetime's callback.
+            local pend = pending_pickup_ids[Heliname]
+            local recorded_id = pend ~= nil and pend[Woundedgroupname] or nil
+            if recorded_id ~= nil then
+                local current_id = dcs_unit_id(Heliname)
+                if current_id == nil or current_id ~= recorded_id then
+                    pend[Woundedgroupname] = nil
+                    opscsar_log(
+                        "Ignoring boarding of pilot " .. entry.id .. " by "
+                        .. tostring(Heliname)
+                        .. ": reported by a different aircraft than the one "
+                        .. "that made the pickup."
+                    )
+                    return
+                end
+                pend[Woundedgroupname] = nil
             end
             -- The helicopter itself must still exist; a boarding reported for a
             -- unit no longer in the world can never be delivered.
@@ -338,11 +354,30 @@ local function opscsar_main()
         end
 
         function my:OnAfterRescued(From, Event, To, HeliUnit, HeliName, PilotsSaved)
-            -- MOOSE raises Rescued synchronously from _RescuePilots
-            -- (__Rescued(-1, ...)) — never scheduled — so a prior lifetime's
-            -- delivery cannot surface after a respawn; anything we still hold
-            -- for this name was either reconciled away on its loss or belongs
-            -- to the aircraft now alive under it.
+            -- _RescuePilots cleared MOOSE's own membership and raised this
+            -- event through FSM:_delayed_transition, which abs()'s the -1 into
+            -- a 1-second-later callback — the delivery itself already happened.
+            -- The _RescuePilots wrapper therefore snapshotted the delivered
+            -- pilots at the real transition; flush those. A helicopter lost
+            -- inside that second, or a respawn reusing the name, cannot erase
+            -- or redirect a completed delivery.
+            local batches = delivered_batches[HeliName]
+            if batches ~= nil then
+                delivered_batches[HeliName] = nil
+                for _, saved in ipairs(batches) do
+                    for _, uuid in ipairs(saved) do
+                        table.insert(csar_rescued, uuid)
+                        opscsar_log(
+                            "Pilot " .. uuid .. " rescued by " .. tostring(HeliName)
+                        )
+                    end
+                end
+                if #batches > 0 then
+                    dirty_state = true
+                end
+                return
+            end
+            -- Fallback for a delivery that never passed the wrapper.
             local saved = onboard[HeliName]
             if saved then
                 for _, uuid in pairs(saved) do
@@ -351,6 +386,52 @@ local function opscsar_main()
                 end
                 onboard[HeliName] = nil
                 dirty_state = true
+            end
+        end
+
+        -- Wrapper: _PickupUnit is the one place every MOOSE pickup passes
+        -- (all three call sites), and it runs BEFORE the 5s-delayed Boarded,
+        -- while the picking aircraft is in hand. Record its DCS runtime id
+        -- per survivor so the delayed Boarded can be tied to the aircraft
+        -- that actually made the pickup. Original behavior untouched.
+        local original_pickup = my._PickupUnit
+        if type(original_pickup) == "function" then
+            my._PickupUnit = function(inst, heli_unit, pilot_name, wounded_group, wounded_group_name, ...)
+                local heli_name = unit_name_of(heli_unit)
+                local entry = wounded_group_name ~= nil
+                    and tracked_by_group(wounded_group_name) or nil
+                if heli_name ~= nil and entry ~= nil then
+                    pending_pickup_ids[heli_name] =
+                        pending_pickup_ids[heli_name] or {}
+                    pending_pickup_ids[heli_name][wounded_group_name] =
+                        dcs_unit_id(heli_name)
+                end
+                return original_pickup(
+                    inst, heli_unit, pilot_name, wounded_group,
+                    wounded_group_name, ...
+                )
+            end
+        end
+
+        -- Wrapper: _RescuePilots is the one delivery point (called from
+        -- _ScheduledSARFlight's "Rescued!" branch). It clears MOOSE's membership
+        -- and raises Rescued on a 1-second-later callback; snapshot the exact
+        -- passengers here, at the real delivery transition, so a loss inside
+        -- that second cannot erase the completed rescue. Original behavior
+        -- untouched.
+        local original_rescue = my._RescuePilots
+        if type(original_rescue) == "function" then
+            my._RescuePilots = function(inst, heli_unit, ...)
+                local heli_name = heli_unit ~= nil and unit_name_of(heli_unit)
+                    or nil
+                local aboard = heli_name ~= nil and onboard[heli_name] or nil
+                if aboard ~= nil then
+                    delivered_batches[heli_name] =
+                        delivered_batches[heli_name] or {}
+                    table.insert(delivered_batches[heli_name], aboard)
+                    onboard[heli_name] = nil
+                end
+                return original_rescue(inst, heli_unit, ...)
             end
         end
 
@@ -884,9 +965,7 @@ local function opscsar_main()
                     or event.id == world.event.S_EVENT_CRASH
                     or event.id == world.event.S_EVENT_DEAD
                     or event.id == world.event.S_EVENT_BIRTH then
-                    reconcile_heli_loss(
-                        unit_name, event.id == world.event.S_EVENT_BIRTH
-                    )
+                    reconcile_heli_loss(unit_name)
                 end
                 -- A tracked survivor dying is a real death, not a boarding:
                 -- native embark removes the unit from the world with no DCS
