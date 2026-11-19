@@ -83,7 +83,7 @@ local function advance(seconds)
     run_due()
 end
 
-local function setup(downed_pilots)
+local function setup(downed_pilots, cfg_overrides)
     clock = 0
     event_handler = nil
     csar_instances = {}
@@ -227,26 +227,28 @@ local function setup(downed_pilots)
         end,
     }
 
-    dcsRetribution = {
-        CSAR = {
-            blueEnabled = "true",
-            redEnabled = "false",
-            blueTemplate = "Template 1",
-            redTemplate = "",
-            rescueAI = "true",
-            requireOpenDoors = "false",
-            playerHoverHeight = "20",
-            playerHoverDistance = "10",
-            hoverExtraction = "false",
-            hoverDurationSeconds = "30",
-            hoverAltitudeMeters = "30",
-            clusterRadius = "0",
-            embarkZoneRadius = "300",
-            blueCountry = "2",
-            redCountry = "6",
-            downedPilots = downed_pilots,
-        },
+    local cfg = {
+        blueEnabled = "true",
+        redEnabled = "false",
+        blueTemplate = "Template 1",
+        redTemplate = "",
+        rescueAI = "true",
+        requireOpenDoors = "false",
+        playerHoverHeight = "20",
+        playerHoverDistance = "10",
+        hoverExtraction = "false",
+        hoverDurationSeconds = "30",
+        hoverAltitudeMeters = "30",
+        clusterRadius = "0",
+        embarkZoneRadius = "300",
+        blueCountry = "2",
+        redCountry = "6",
+        downedPilots = downed_pilots,
     }
+    for key, value in pairs(cfg_overrides or {}) do
+        cfg[key] = value
+    end
+    dcsRetribution = { CSAR = cfg }
     csar_rescued = rescued
     dirty_state = false
 
@@ -565,9 +567,11 @@ local function test_respawn_overlap_reports_each_batch_once()
 end
 
 -- Interleaved states: survivor A2 picked up (pending, Boarded in flight) while
--- A1 is already aboard; the helicopter delivers A1, then is lost before A2's
--- Boarded can run and before the delayed Rescued for A1. A1 is reported; A2
--- is not.
+-- A1 is already aboard; the helicopter delivers both at the transition —
+-- MOOSE counts pending pickups in PilotsSaved all the same — and is lost
+-- inside the Rescued callback delay afterwards. Both are credited exactly
+-- once at the delivery transition; neither the loss nor A2's late Boarded can
+-- revive or duplicate them.
 local function test_mixed_aboard_and_pending_on_loss()
     local dp1 = pilot("uuid-aboard", "Group A1", "Survivor A1")
     local dp2 = pilot("uuid-pending", "Group A2", "Survivor A2")
@@ -580,16 +584,100 @@ local function test_mixed_aboard_and_pending_on_loss()
     pickup(my, "Helo 1", "Group A2") -- t2: pending, Boarded due t7
 
     advance(3) -- t5: Boarded A1 accepted (same aircraft)
-    deliver(my, "Helo 1") -- t5: delivery transition, A1 handed over
+    deliver(my, "Helo 1") -- t5: both handed over; Rescued scheduled t6
     heli_event(world_events.S_EVENT_UNIT_LOST, heli_unit("Helo 1", 0, 0)) -- t5
-    advance(1) -- t6: Rescued for A1 fires after the loss
-    advance(1) -- t7: Boarded A2 arrives from the dead lifetime
+    advance(1) -- t6: Rescued fires (accounting already settled at delivery)
+    advance(1) -- t7: A2's delayed Boarded arrives — must not re-credit
+    deliver(my, "Helo 1") -- must not report anything
     advance(1)
 
-    check(sorted_rescued() == "uuid-aboard",
-        "the boarded pilot is delivered and reported even though the loss "
-        .. "lands inside the Rescued delay; the pending pickup lost with "
-        .. "the helicopter is not")
+    check(sorted_rescued() == "uuid-aboard,uuid-pending",
+        "delivery credits boarded and still-pending pickups together")
+    check(count_in(csar_rescued, "uuid-aboard") == 1
+            and count_in(csar_rescued, "uuid-pending") == 1,
+        "the loss inside the Rescued delay and the late Boarded cannot "
+        .. "revive or duplicate either pilot")
+end
+
+-- C3-cross-helicopter-delivery: two helicopters of the same instance deliver
+-- half a second apart. MOOSE's negative-event dedup is instance-wide, so the
+-- second delivery's Rescued callback is cancelled — accounting must not depend
+-- on a callback per delivery or helicopter B's pilots would never report.
+local function test_cross_helicopter_delivery_with_coalesced_callback()
+    local dp1 = pilot("uuid-heli-a", "Group HA", "Survivor HA")
+    local dp2 = pilot("uuid-heli-b", "Group HB", "Survivor HB")
+    setup({ dp1, dp2 })
+    local my = assert(csar_instances[1], "Ops.CSAR instance not built")
+
+    set_in_world("Helo A", true)
+    set_in_world("Helo B", true)
+    pickup(my, "Helo A", "Group HA") -- Boarded due t5
+    pickup(my, "Helo B", "Group HB") -- Boarded due t5
+    advance(5) -- both Boarded accepted
+    deliver(my, "Helo A") -- t5: Rescued scheduled for t6 (instance-wide)
+    advance(0.5)
+    deliver(my, "Helo B") -- t5.5: Rescued CANCELLED by the FSM dedup
+    advance(2) -- t7.5: settle whatever callbacks survived
+
+    check(sorted_rescued() == "uuid-heli-a,uuid-heli-b",
+        "a delivery whose Rescued callback was coalesced away is still "
+        .. "credited, with the other helicopter's")
+    check(count_in(csar_rescued, "uuid-heli-a") == 1
+            and count_in(csar_rescued, "uuid-heli-b") == 1,
+        "no stranding and no duplication across helicopters")
+end
+
+-- C3-pending-at-delivery: pickup A boards normally, pickup B's Boarded is
+-- still in flight when the helicopter delivers (B was handed over with the
+-- rest — MOOSE counts it). Both credit at the transition; B's late Boarded is
+-- refused, and a second delivery reports nothing.
+local function test_pending_pickup_delivered_before_its_boarding()
+    local dp1 = pilot("uuid-boarded", "Group PA", "Survivor PA")
+    local dp2 = pilot("uuid-pending", "Group PB", "Survivor PB")
+    setup({ dp1, dp2 })
+    local my = assert(csar_instances[1], "Ops.CSAR instance not built")
+
+    set_in_world("Helo 1", true)
+    pickup(my, "Helo 1", "Group PA") -- Boarded due t5
+    advance(5) -- Boarded PA accepted
+    pickup(my, "Helo 1", "Group PB") -- t5: pending, Boarded due t10
+    deliver(my, "Helo 1") -- t5: both handed over before PB's Boarded
+
+    check(sorted_rescued() == "uuid-boarded,uuid-pending",
+        "a pickup delivered before its Boarded is credited at the transition")
+
+    advance(5) -- t10: PB's delayed Boarded arrives — must be refused
+    deliver(my, "Helo 1") -- inTransitGroups already cleared: no-op
+    advance(1)
+
+    check(sorted_rescued() == "uuid-boarded,uuid-pending",
+        "the late Boarded cannot recreate a delivered pilot; a second "
+        .. "delivery reports nothing")
+    check(count_in(csar_rescued, "uuid-pending") == 1,
+        "the delivered-then-boarded pilot is not double-reported")
+end
+
+-- Fast delivery: a single pickup handed over before its Boarded ever fires,
+-- with the delayed Boarded arriving afterwards. Credited exactly once.
+local function test_single_fast_delivery_credits_once()
+    local dp = pilot("uuid-fast", "Group F", "Survivor F")
+    setup({ dp })
+    local my = assert(csar_instances[1], "Ops.CSAR instance not built")
+
+    set_in_world("Helo 1", true)
+    pickup(my, "Helo 1", "Group F") -- Boarded due t5
+    deliver(my, "Helo 1") -- t0: delivered before the Boarded
+
+    check(sorted_rescued() == "uuid-fast",
+        "a single pickup delivered before its Boarded is credited")
+
+    advance(5) -- the delayed Boarded arrives
+    deliver(my, "Helo 1")
+    advance(1)
+
+    check(sorted_rescued() == "uuid-fast"
+            and count_in(csar_rescued, "uuid-fast") == 1,
+        "the late Boarded and second delivery cannot duplicate the credit")
 end
 
 -- C3-hover: the event handler is registered even when every survivor needs a
@@ -661,6 +749,33 @@ local function test_poll_death_is_not_a_rescue_but_embark_still_is()
         "poll credits the silent embark and refuses the known-dead survivor")
 end
 
+-- Cross-coalition instances: blue and red Ops.CSAR each reconcile and credit
+-- their own pickups/deliveries independently.
+local function test_cross_coalition_instances_credit_independently()
+    local dp_blue = pilot("uuid-blue", "Group CB", "Survivor CB")
+    local dp_red = pilot("uuid-red", "Group CR", "Survivor CR")
+    setup(
+        { dp_blue, dp_red },
+        { redEnabled = "true", redTemplate = "Template 2" }
+    )
+    local red = assert(csar_instances[2], "red Ops.CSAR instance not built")
+    units_by_name["Survivor CR"].getCoalition = function()
+        return "red"
+    end
+
+    set_in_world("Helo Blue", true)
+    set_in_world("Helo Red", true)
+    pickup(csar_instances[1], "Helo Blue", "Group CB")
+    pickup(red, "Helo Red", "Group CR")
+    advance(5) -- both Boarded accepted
+    deliver(csar_instances[1], "Helo Blue")
+    deliver(red, "Helo Red")
+    advance(1)
+
+    check(sorted_rescued() == "uuid-blue,uuid-red",
+        "blue and red instances credit their own rescues independently")
+end
+
 local function main()
     test_landing_without_boarding_is_not_a_rescue()
     test_landing_with_boarding_still_credits()
@@ -670,6 +785,10 @@ local function main()
     test_delivered_before_loss_still_reports()
     test_respawn_overlap_reports_each_batch_once()
     test_mixed_aboard_and_pending_on_loss()
+    test_cross_helicopter_delivery_with_coalesced_callback()
+    test_pending_pickup_delivered_before_its_boarding()
+    test_single_fast_delivery_credits_once()
+    test_cross_coalition_instances_credit_independently()
     test_all_hover_mission_still_registers_lifetimes()
     test_death_during_wait_then_takeoff_is_not_a_rescue()
     test_poll_death_is_not_a_rescue_but_embark_still_is()

@@ -149,12 +149,6 @@ local function opscsar_main()
     -- _PickupUnit wrapper at the real pickup moment (the delayed Boarded comes
     -- 5s later, when a same-name respawn can already have taken the name).
     local pending_pickup_ids = {}
-    -- helo unit name -> FIFO of delivered passenger lists, snapshotted by the
-    -- _RescuePilots wrapper at the real delivery transition. MOOSE raises the
-    -- Rescued event on a scheduled callback (FSM:_delayed_transition abs()'s
-    -- __Rescued(-1) to 1s), and a helicopter lost inside that second must not
-    -- erase a rescue that already happened.
-    local delivered_batches = {}
 
     -- The DCS runtime id of the live unit under `name`, or nil. Ids differ
     -- between a destroyed helicopter and its same-name respawn, which is the
@@ -297,6 +291,18 @@ local function opscsar_main()
             if entry == nil or not Heliname then
                 return
             end
+            -- A pilot already settled — delivered, or accounted for any other
+            -- way — cannot board again: a Boarded arriving afterwards is a
+            -- delayed callback whose delivery has already happened (e.g. a
+            -- pickup handed over by _RescuePilots before its Boarded ran).
+            -- Idempotent settle: crediting twice would double-report.
+            if entry.done then
+                opscsar_log(
+                    "Ignoring boarding of pilot " .. entry.id .. " by "
+                    .. tostring(Heliname) .. ": already settled."
+                )
+                return
+            end
             -- A pilot who went down with a lost helicopter cannot board again:
             -- a Boarded raised for them afterwards is a delayed callback from
             -- the previous aircraft lifetime, not a fresh pickup.
@@ -354,30 +360,12 @@ local function opscsar_main()
         end
 
         function my:OnAfterRescued(From, Event, To, HeliUnit, HeliName, PilotsSaved)
-            -- _RescuePilots cleared MOOSE's own membership and raised this
-            -- event through FSM:_delayed_transition, which abs()'s the -1 into
-            -- a 1-second-later callback — the delivery itself already happened.
-            -- The _RescuePilots wrapper therefore snapshotted the delivered
-            -- pilots at the real transition; flush those. A helicopter lost
-            -- inside that second, or a respawn reusing the name, cannot erase
-            -- or redirect a completed delivery.
-            local batches = delivered_batches[HeliName]
-            if batches ~= nil then
-                delivered_batches[HeliName] = nil
-                for _, saved in ipairs(batches) do
-                    for _, uuid in ipairs(saved) do
-                        table.insert(csar_rescued, uuid)
-                        opscsar_log(
-                            "Pilot " .. uuid .. " rescued by " .. tostring(HeliName)
-                        )
-                    end
-                end
-                if #batches > 0 then
-                    dirty_state = true
-                end
-                return
-            end
-            -- Fallback for a delivery that never passed the wrapper.
+            -- Rescued arrives ~1s after _RescuePilots (FSM:_delayed_transition
+            -- abs()'s the -1) and is instance-wide deduplicated, so it carries
+            -- no reliable per-delivery identity and accounting does not depend
+            -- on it: the _RescuePilots wrapper credits at the transition
+            -- itself. This handler only sweeps up anything that somehow bypassed
+            -- that wrapper, so an unwrapped delivery still reports.
             local saved = onboard[HeliName]
             if saved then
                 for _, uuid in pairs(saved) do
@@ -414,24 +402,63 @@ local function opscsar_main()
         end
 
         -- Wrapper: _RescuePilots is the one delivery point (called from
-        -- _ScheduledSARFlight's "Rescued!" branch). It clears MOOSE's membership
-        -- and raises Rescued on a 1-second-later callback; snapshot the exact
-        -- passengers here, at the real delivery transition, so a loss inside
-        -- that second cannot erase the completed rescue. Original behavior
-        -- untouched.
+        -- _ScheduledSARFlight's "Rescued!" branch, only when
+        -- inTransitGroups[heliName] actually holds members). The delivery
+        -- transition itself — MOOSE hands over every member, whether its
+        -- Boarded already ran or it was still awaiting the 5s-delayed event —
+        -- is the authoritative moment to credit, so it is done here, right
+        -- after the original method succeeded: neither the Rescued callback
+        -- (delayed 1s and instance-wide deduplicated by the FSM, so one
+        -- helicopter's delivery can cancel another's callback) nor a
+        -- helicopter lost inside that second can strand or erase it.
         local original_rescue = my._RescuePilots
         if type(original_rescue) == "function" then
             my._RescuePilots = function(inst, heli_unit, ...)
                 local heli_name = heli_unit ~= nil and unit_name_of(heli_unit)
                     or nil
-                local aboard = heli_name ~= nil and onboard[heli_name] or nil
-                if aboard ~= nil then
-                    delivered_batches[heli_name] =
-                        delivered_batches[heli_name] or {}
-                    table.insert(delivered_batches[heli_name], aboard)
+                -- Actual membership check, before the original clears it.
+                local delivering = heli_name ~= nil
+                    and type(inst.inTransitGroups) == "table"
+                    and inst.inTransitGroups[heli_name] ~= nil or false
+                local result = original_rescue(inst, heli_unit, ...)
+                if delivering then
+                    -- Credit everything tracked that was aboard: acknowledged
+                    -- boardings plus pickups whose Boarded had not run yet
+                    -- (MOOSE counts them in PilotsSaved all the same). Pending
+                    -- identities are retired here, so a late Boarded from a
+                    -- lifetime that was delivered past its event cannot
+                    -- recreate the entry, and the entries are settled done so
+                    -- no other path can double-report them.
+                    local aboard = onboard[heli_name]
+                    local pend = pending_pickup_ids[heli_name]
                     onboard[heli_name] = nil
+                    pending_pickup_ids[heli_name] = nil
+                    local credited = {}
+                    if aboard ~= nil then
+                        for _, uuid in ipairs(aboard) do
+                            credited[#credited + 1] = uuid
+                        end
+                    end
+                    if pend ~= nil then
+                        for wounded_group_name, _recorded_id in pairs(pend) do
+                            local entry = tracked_by_group(wounded_group_name)
+                            if entry ~= nil and not entry.done then
+                                entry.done = true
+                                credited[#credited + 1] = entry.id
+                            end
+                        end
+                    end
+                    for _, uuid in ipairs(credited) do
+                        table.insert(csar_rescued, uuid)
+                        opscsar_log(
+                            "Pilot " .. uuid .. " rescued by " .. tostring(heli_name)
+                        )
+                    end
+                    if #credited > 0 then
+                        dirty_state = true
+                    end
                 end
-                return original_rescue(inst, heli_unit, ...)
+                return result
             end
         end
 
